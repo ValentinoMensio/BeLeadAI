@@ -3,7 +3,13 @@
  */
 
 import { loadSettings, saveSettings } from "../../services/settings-service.js";
-import { getAuthHeaders, apiFetch, fetchPing, fetchApiConfig, fetchVersionMeta } from "../../services/api-client.js";
+import {
+  getAuthHeaders,
+  apiFetch,
+  fetchPing,
+  fetchApiConfig,
+  fetchVersionMeta,
+} from "../../services/api-client.js";
 import {
   loadLastJobs as loadLastJobsService,
   loadJobSummary,
@@ -13,7 +19,12 @@ import {
 import { ensureJobsWsConnected, subscribeJobsUpdated } from "../../services/ws-jobs-service.js";
 import { getState, setState } from "./state/popup-store.js";
 import { qs, qsa } from "../../shared/utils/dom.js";
-import { formatJobDate, formatJobStatusLabel, formatJobOptionLabel, isUnlimited } from "../../shared/utils/format.js";
+import {
+  formatJobDate,
+  formatJobStatusLabel,
+  formatJobOptionLabel,
+  isUnlimited,
+} from "../../shared/utils/format.js";
 import { renderJobsList } from "./ui/components/jobs-list.js";
 import { renderJobDetails } from "./ui/components/job-details.js";
 import {
@@ -21,11 +32,7 @@ import {
   updateRecipientsSummaryLabel,
 } from "./ui/components/recipients-panel.js";
 import { refreshLimitsWithCache, showLimitDetail, getLimitsData } from "./ui/limits-view.js";
-import {
-  setSendStatus,
-  setEnqueueSendEnabled,
-  updateSendJobProgress,
-} from "./ui/send-view.js";
+import { setSendStatus, setEnqueueSendEnabled, updateSendJobProgress } from "./ui/send-view.js";
 import { initSetup } from "./controllers/setup-controller.js";
 import { initLimits } from "./controllers/limits-controller.js";
 import { initFetchTab } from "./controllers/fetch-controller.js";
@@ -54,25 +61,36 @@ function normalizePlanName(rawPlan) {
 }
 
 function isExpiredPlanPingResult(pingResult) {
-  const code = String(pingResult?.errorCode || "").trim().toUpperCase();
+  const code = String(pingResult?.errorCode || "")
+    .trim()
+    .toUpperCase();
   if (code === "FREE_PLAN_EXPIRED" || code === "PLAN_EXPIRED") return true;
-  const quota = String(pingResult?.errorDetails?.blocking_quota || "").trim().toLowerCase();
+  const quota = String(pingResult?.errorDetails?.blocking_quota || "")
+    .trim()
+    .toLowerCase();
   if (quota === "free_plan_duration" || quota === "plan_duration") return true;
   return false;
 }
 
 function isUpdateRequiredPingResult(pingResult) {
-  const code = String(pingResult?.errorCode || "").trim().toUpperCase();
+  const code = String(pingResult?.errorCode || "")
+    .trim()
+    .toUpperCase();
   if (code === "CLIENT_UPDATE_REQUIRED") return true;
   const status = Number(pingResult?.status || 0) || 0;
   return status === 426;
 }
 
 function getUpdateInfo(pingResult, storedState = null) {
-  const details = pingResult?.errorDetails && typeof pingResult.errorDetails === "object"
-    ? pingResult.errorDetails
-    : (storedState?.details && typeof storedState.details === "object" ? storedState.details : {});
-  const minRequired = String(details?.minRequiredVersion || details?.min_required_version || "").trim();
+  const details =
+    pingResult?.errorDetails && typeof pingResult.errorDetails === "object"
+      ? pingResult.errorDetails
+      : storedState?.details && typeof storedState.details === "object"
+        ? storedState.details
+        : {};
+  const minRequired = String(
+    details?.minRequiredVersion || details?.min_required_version || ""
+  ).trim();
   const latest = String(details?.latestVersion || details?.latest_version || "").trim();
   const updateUrl =
     String(details?.updateUrl || details?.update_url || storedState?.update_url || "").trim() ||
@@ -133,7 +151,10 @@ function showUpdateRequiredScreen(updateInfo) {
   if (mainUi) mainUi.style.display = "none";
   if (expiredScreen) expiredScreen.style.display = "none";
   if (updateScreen) updateScreen.style.display = "flex";
-  if (messageEl) messageEl.textContent = String(updateInfo?.message || "").trim() || "Necesitas instalar la version mas reciente para continuar.";
+  if (messageEl)
+    messageEl.textContent =
+      String(updateInfo?.message || "").trim() ||
+      "Necesitas instalar la version mas reciente para continuar.";
   if (versionsEl) {
     const minV = String(updateInfo?.minRequired || "").trim();
     const latestV = String(updateInfo?.latest || "").trim();
@@ -270,15 +291,25 @@ export async function init() {
 
   const storedPlanBlock = await loadPlanBlockState();
   const storedVersionBlock = await loadVersionBlockState();
-  const storedPlanCode = String(storedPlanBlock?.code || "").trim().toUpperCase();
-  const storedPlanQuota = String(storedPlanBlock?.details?.blocking_quota || "").trim().toLowerCase();
+  const storedPlanCode = String(storedPlanBlock?.code || "")
+    .trim()
+    .toUpperCase();
+  const storedPlanQuota = String(storedPlanBlock?.details?.blocking_quota || "")
+    .trim()
+    .toLowerCase();
   const isStoredPlanExpired =
     storedPlanCode === "PLAN_EXPIRED" ||
     storedPlanCode === "FREE_PLAN_EXPIRED" ||
     storedPlanQuota === "plan_duration" ||
     storedPlanQuota === "free_plan_duration";
-  const isPlanExpired = isExpiredPlanPingResult(pingResult) || (!pingResult.tokenOk && isStoredPlanExpired);
-  const isUpdateRequired = isUpdateRequiredPingResult(pingResult) || (!pingResult.tokenOk && String(storedVersionBlock?.code || "").trim().toUpperCase() === "CLIENT_UPDATE_REQUIRED");
+  const isPlanExpired =
+    isExpiredPlanPingResult(pingResult) || (!pingResult.tokenOk && isStoredPlanExpired);
+  const isUpdateRequired =
+    isUpdateRequiredPingResult(pingResult) ||
+    (!pingResult.tokenOk &&
+      String(storedVersionBlock?.code || "")
+        .trim()
+        .toUpperCase() === "CLIENT_UPDATE_REQUIRED");
   if (isUpdateRequired) {
     showUpdateRequiredScreen(getUpdateInfo(pingResult, storedVersionBlock));
     const cfgDot = qs("#cfgDot");
@@ -370,7 +401,8 @@ export async function init() {
           sendApi.updateSenderStatus();
           sendApi.refreshRecipients(true);
           const stats = await sendApi.refreshSendProgress();
-          if (stats && (stats.queued || 0) + (stats.sent || 0) > 0) sendApi.startSendProgressPolling();
+          if (stats && (stats.queued || 0) + (stats.sent || 0) > 0)
+            sendApi.startSendProgressPolling();
         }
         if (tab.dataset.tab === "fetch") {
           fetchApi.refreshJobsList(5);
@@ -411,16 +443,24 @@ export async function init() {
     if (message.type !== "dm_status_update") return;
     if (message.data?.error === "thread_identity_not_verified") {
       if (message.data?.isRunning === false) {
-        setSendStatus("No se pudo verificar el chat del destinatario. Revisá Instagram Direct y volvé a iniciar.", true);
+        setSendStatus(
+          "No se pudo verificar el chat del destinatario. Revisá Instagram Direct y volvé a iniciar.",
+          true
+        );
       } else {
         setSendStatus(
-          message.data?.message || "No se pudo verificar un chat. Se omite ese contacto y el envío continúa.",
+          message.data?.message ||
+            "No se pudo verificar un chat. Se omite ese contacto y el envío continúa.",
           false
         );
       }
     }
     if (message.data?.error === "watchdog_stuck") {
-      setSendStatus(message.data?.message || "El envío se detuvo por falta de progreso. Revisá Instagram y reiniciá.", true);
+      setSendStatus(
+        message.data?.message ||
+          "El envío se detuvo por falta de progreso. Revisá Instagram y reiniciá.",
+        true
+      );
     }
     sendApi.updateSenderStatus();
     await sendApi.refreshSendProgress();

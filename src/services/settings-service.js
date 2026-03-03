@@ -83,7 +83,10 @@ export function saveSettings(patch) {
     const done = async () => {
       if (hasSession) {
         await setSession(sessionPatch);
-        chrome.storage.local.remove(["api_token", "jwt_token", "jwt_expires_at", "refresh_token"], () => resolve());
+        chrome.storage.local.remove(
+          ["api_token", "jwt_token", "jwt_expires_at", "refresh_token"],
+          () => resolve()
+        );
         return;
       }
       resolve();

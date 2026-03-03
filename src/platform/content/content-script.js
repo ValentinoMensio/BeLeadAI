@@ -2,9 +2,9 @@
 // Se ejecuta en instagram.com/* y maneja el envío de DMs con comportamiento humanizado
 
 (function initContentScript() {
-  'use strict';
+  "use strict";
 
-  const CS_BUILD = '2026-02-09-csp-fix';
+  const CS_BUILD = "2026-02-09-csp-fix";
 
   const selectorsModule = self.createContentSelectorsModule();
   const observersModule = self.createContentObserversModule({ selectorsModule });
@@ -13,5 +13,5 @@
 
   messagingModule.registerMessageHandlers();
 
-  console.log('[BeLeadAI] Content script cargado. build:', CS_BUILD);
+  console.log("[BeLeadAI] Content script cargado. build:", CS_BUILD);
 })();

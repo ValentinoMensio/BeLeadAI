@@ -11,7 +11,9 @@ function isObject(value) {
 }
 
 function normalizeBaseUrl(raw) {
-  const base = String(raw || "").trim().replace(/\/+$/, "");
+  const base = String(raw || "")
+    .trim()
+    .replace(/\/+$/, "");
   if (!base) fail("Missing API_BASE.");
   let url;
   try {
@@ -60,7 +62,10 @@ function assertEnvelope(status, payload, context) {
   }
 }
 
-async function request(baseUrl, { context, method, path, token = "", body = null, expectedStatuses = [] }) {
+async function request(
+  baseUrl,
+  { context, method, path, token = "", body = null, expectedStatuses = [] }
+) {
   const url = new URL(path, baseUrl).toString();
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;

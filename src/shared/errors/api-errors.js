@@ -162,7 +162,10 @@ export function formatApiErrorForUser(status, data, rawText, retryAfterSec) {
   const code = data && data.error && data.error.code ? data.error.code : "";
   const byStatus = MESSAGES[status];
   let message;
-  if ((status === 400 || status === 409 || status === 422) && (message = formatBlockingQuotaError(data))) {
+  if (
+    (status === 400 || status === 409 || status === 422) &&
+    (message = formatBlockingQuotaError(data))
+  ) {
     // prioritized blocking quota message
   } else if (status === 400 && (message = formatFollowingsQuotaError(data))) {
     // prioritized followings quota message
@@ -194,7 +197,12 @@ export function getRetryAfterSec(resp) {
 export function retryAfterFromResponse(resp, data) {
   const fromHeader = getRetryAfterSec(resp);
   if (fromHeader != null) return fromHeader;
-  if (data && data.error && data.error.details && typeof data.error.details.retry_after === "number") {
+  if (
+    data &&
+    data.error &&
+    data.error.details &&
+    typeof data.error.details.retry_after === "number"
+  ) {
     return data.error.details.retry_after;
   }
   return null;

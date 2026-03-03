@@ -28,7 +28,8 @@ export const API_PATHS = {
   results: withExt("/results"),
   resultSummary: (id) => withExt(`/results/${encodeSegment(id)}/summary`),
   recipientSources: withExt("/recipient-sources"),
-  recipientSourceRecipients: (sourceId) => withExt(`/recipient-sources/${encodeSegment(sourceId)}/recipients`),
+  recipientSourceRecipients: (sourceId) =>
+    withExt(`/recipient-sources/${encodeSegment(sourceId)}/recipients`),
   jobCancel: (id) => withExt(`/jobs/${encodeSegment(id)}/cancel`),
   sendEnqueue: withExt("/send/enqueue"),
   followingsEnqueue: withExt("/followings/enqueue"),

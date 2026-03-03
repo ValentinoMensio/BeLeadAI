@@ -63,7 +63,8 @@
         const rects = el.getClientRects();
         if (!rects || rects.length === 0) return false;
         const style = window.getComputedStyle(el);
-        if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') return false;
+        if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0")
+          return false;
         return true;
       } catch (_) {
         return false;
@@ -76,7 +77,7 @@
       return delay;
     }
 
-    async function waitForElement(selectors, timeout = 10000, logLabel = 'element') {
+    async function waitForElement(selectors, timeout = 10000, logLabel = "element") {
       const selectorList = Array.isArray(selectors) ? selectors : [selectors];
       const startTime = Date.now();
       let lastLog = 0;
@@ -85,24 +86,29 @@
         for (let i = 0; i < selectorList.length; i++) {
           const selector = selectorList[i];
           try {
-            if (!selector.includes(':has-text')) {
+            if (!selector.includes(":has-text")) {
               const element = document.querySelector(selector);
               if (element && isElementVisible(element)) {
-                console.log(`[BeLeadAI] ${logLabel} encontrado con selector [${i}]:`, selector.substring(0, 60));
+                console.log(
+                  `[BeLeadAI] ${logLabel} encontrado con selector [${i}]:`,
+                  selector.substring(0, 60)
+                );
                 return element;
               }
             } else {
               const match = selector.match(/:has-text\("([^"]+)"\)/);
               if (match) {
                 const text = match[1];
-                const baseSelector = selector.replace(/:has-text\("[^"]+"\)/, '').trim();
+                const baseSelector = selector.replace(/:has-text\("[^"]+"\)/, "").trim();
                 const scopeSelector = baseSelector || 'button, div[role="button"], a, span';
                 const root = document.querySelectorAll(scopeSelector);
                 const elements = Array.from(root);
                 for (const el of elements) {
                   if (el.textContent && el.textContent.trim().includes(text)) {
                     if (isElementVisible(el)) {
-                      console.log(`[BeLeadAI] ${logLabel} encontrado con :has-text("${text}") [${i}]`);
+                      console.log(
+                        `[BeLeadAI] ${logLabel} encontrado con :has-text("${text}") [${i}]`
+                      );
                       return el;
                     }
                   }
@@ -115,21 +121,26 @@
         }
         const elapsed = Date.now() - startTime;
         if (elapsed - lastLog > 3000) {
-          console.log(`[BeLeadAI] Esperando ${logLabel}... ${Math.round(elapsed / 1000)}s (selectores: ${selectorList.length})`);
+          console.log(
+            `[BeLeadAI] Esperando ${logLabel}... ${Math.round(elapsed / 1000)}s (selectores: ${selectorList.length})`
+          );
           lastLog = elapsed;
         }
         await sleep(200);
       }
-      console.error(`[BeLeadAI] TIMEOUT: no se encontró ${logLabel} después de ${timeout}ms. Selectores probados:`, selectorList);
+      console.error(
+        `[BeLeadAI] TIMEOUT: no se encontró ${logLabel} después de ${timeout}ms. Selectores probados:`,
+        selectorList
+      );
       return null;
     }
 
     function findSendButton() {
-      const labels = ['Send', 'Enviar'];
+      const labels = ["Send", "Enviar"];
       for (const label of labels) {
         const svg = document.querySelector(`svg[aria-label="${label}"]`);
         if (svg) {
-          const btn = svg.closest('[role="button"]') || svg.closest('button') || svg.parentElement;
+          const btn = svg.closest('[role="button"]') || svg.closest("button") || svg.parentElement;
           if (btn) {
             console.log('[BeLeadAI] Botón Send encontrado por svg[aria-label="' + label + '"]');
             return btn;
@@ -148,7 +159,7 @@
         if (btn && isElementVisible(btn)) return btn;
         await sleep(300);
       }
-      return waitForElement(HUMAN_CONFIG.selectors.sendButton, 3000, 'botón Send');
+      return waitForElement(HUMAN_CONFIG.selectors.sendButton, 3000, "botón Send");
     }
 
     return {

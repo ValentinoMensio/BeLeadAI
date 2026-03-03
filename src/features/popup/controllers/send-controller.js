@@ -3,7 +3,11 @@
  */
 
 import { API_PATHS } from "../../../config/endpoints.js";
-import { isTerminalJobStatus, normalizeEntityType, normalizeJobStatus } from "../../../shared/domain/job-contract.js";
+import {
+  isTerminalJobStatus,
+  normalizeEntityType,
+  normalizeJobStatus,
+} from "../../../shared/domain/job-contract.js";
 
 const SEND_PROGRESS_POLL_MS = 4000;
 const SENDER_STATUS_POLL_MS = 3000;
@@ -20,7 +24,12 @@ const CANCEL_JOB_NON_RETRYABLE_CODES = new Set([
   "JOB_NOT_FOUND",
   "RESULT_ID_REQUIRED",
 ]);
-const ACTIVE_CONFLICT_ERROR_CODES = new Set(["ACTIVE_JOB_BY_CLIENT", "ENQUEUE_LOCK_BUSY", "ACTIVE_SEND_JOB", "CONFLICT"]);
+const ACTIVE_CONFLICT_ERROR_CODES = new Set([
+  "ACTIVE_JOB_BY_CLIENT",
+  "ENQUEUE_LOCK_BUSY",
+  "ACTIVE_SEND_JOB",
+  "CONFLICT",
+]);
 const NO_PENDING_ERROR_CODES = new Set(["NO_PENDING_RECIPIENTS", "RECIPIENTS_ALREADY_MESSAGED"]);
 
 /**
@@ -30,7 +39,8 @@ const NO_PENDING_ERROR_CODES = new Set(["NO_PENDING_RECIPIENTS", "RECIPIENTS_ALR
 export function initSendTab(deps) {
   const { store, services, ui, dom } = deps;
   const { getState, setState } = store;
-  const { loadSettings, apiFetch, loadJobSummary, loadRecipientsJobsService, cancelJobService } = services;
+  const { loadSettings, apiFetch, loadJobSummary, loadRecipientsJobsService, cancelJobService } =
+    services;
   const {
     setSendStatus,
     setEnqueueSendEnabled,
@@ -118,9 +128,16 @@ export function initSendTab(deps) {
           error: result?.error?.message || result?.error || lastResult.error,
         };
 
-        const errorCode = String(result?.error?.code || "").trim().toUpperCase();
+        const errorCode = String(result?.error?.code || "")
+          .trim()
+          .toUpperCase();
         const status = Number(result?.status || 0);
-        if (CANCEL_JOB_NON_RETRYABLE_CODES.has(errorCode) || status === 401 || status === 403 || status === 404) {
+        if (
+          CANCEL_JOB_NON_RETRYABLE_CODES.has(errorCode) ||
+          status === 401 ||
+          status === 403 ||
+          status === 404
+        ) {
           return { ...lastResult, attempts: i + 1 };
         }
       } catch (e) {
@@ -144,9 +161,11 @@ export function initSendTab(deps) {
     if (stage === "task_claimed") return "Tarea tomada. Preparando envío...";
     if (stage === "ws_tasks") return "Recibiendo tareas en tiempo real...";
     if (stage === "pull_ok") return "Buscando nuevas tareas en el servidor...";
-    if (stage === "no_tasks_retry") return "No hay tareas por ahora. Reintentando automaticamente...";
+    if (stage === "no_tasks_retry")
+      return "No hay tareas por ahora. Reintentando automaticamente...";
     if (stage === "content_ack") return "Instagram respondió. Confirmando resultado...";
-    if (stage === "thread_identity_skip") return "No se pudo validar un hilo. Saltando ese contacto y continuando...";
+    if (stage === "thread_identity_skip")
+      return "No se pudo validar un hilo. Saltando ese contacto y continuando...";
     if (stage === "recovery") return "Recuperando conexión y pestaña de Instagram...";
     if (stage === "result_reported") return "Resultado reportado. Continuando...";
     if (stage === "started") return "Sender iniciado. Preparando primer envío...";
@@ -187,7 +206,9 @@ export function initSendTab(deps) {
     if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
       const bytes = new TextEncoder().encode(input);
       const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-      return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
     }
     let hash = 2166136261;
     for (let i = 0; i < input.length; i++) {
@@ -197,13 +218,32 @@ export function initSendTab(deps) {
     return (hash >>> 0).toString(16).padStart(8, "0");
   }
 
-  async function buildSendIdempotency(fromAccount, usernames, messageTemplate, sourceJobId, dryRun, useAi) {
-    const normalizedRecipients = [...new Set((usernames || []).map((u) => String(u || "").trim().toLowerCase()).filter(Boolean))].sort();
+  async function buildSendIdempotency(
+    fromAccount,
+    usernames,
+    messageTemplate,
+    sourceJobId,
+    dryRun,
+    useAi
+  ) {
+    const normalizedRecipients = [
+      ...new Set(
+        (usernames || [])
+          .map((u) =>
+            String(u || "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean)
+      ),
+    ].sort();
     const messageHash = await sha256Hex(String(messageTemplate || "").trim());
     const recipientIdempotencyKeys = {};
     for (const recipient of normalizedRecipients) {
       const perRecipientPayload = [
-        String(fromAccount || "").trim().toLowerCase(),
+        String(fromAccount || "")
+          .trim()
+          .toLowerCase(),
         recipient,
         messageHash,
         dryRun ? "1" : "0",
@@ -212,7 +252,9 @@ export function initSendTab(deps) {
       recipientIdempotencyKeys[recipient] = await sha256Hex(perRecipientPayload);
     }
     const keyPayload = [
-      String(fromAccount || "").trim().toLowerCase(),
+      String(fromAccount || "")
+        .trim()
+        .toLowerCase(),
       String(sourceJobId || "").trim(),
       dryRun ? "1" : "0",
       useAi ? "1" : "0",
@@ -232,7 +274,9 @@ export function initSendTab(deps) {
 
   function normalizeSendSummary(raw) {
     if (!raw || typeof raw !== "object") return null;
-    const queued = normalizeCounter(raw.queued ?? raw.pending ?? raw.pending_count ?? raw.queued_count);
+    const queued = normalizeCounter(
+      raw.queued ?? raw.pending ?? raw.pending_count ?? raw.queued_count
+    );
     const sent = normalizeCounter(raw.running ?? raw.sent ?? raw.running_count ?? raw.sent_count);
     const ok = normalizeCounter(raw.completed ?? raw.ok ?? raw.completed_count ?? raw.ok_count);
     const error = normalizeCounter(raw.failed ?? raw.error ?? raw.failed_count ?? raw.error_count);
@@ -248,9 +292,8 @@ export function initSendTab(deps) {
 
   async function getLastSendJobId() {
     const data = await new Promise((r) =>
-      chrome.storage.local.get(
-        { last_send_job_id: null, dm_sender_current_job_id: null },
-        (d) => r(d)
+      chrome.storage.local.get({ last_send_job_id: null, dm_sender_current_job_id: null }, (d) =>
+        r(d)
       )
     );
     const jobIdRaw = data.last_send_job_id || data.dm_sender_current_job_id || null;
@@ -330,10 +373,19 @@ export function initSendTab(deps) {
     const count = st.selectedRecipientSet.size;
     const total = st.selectedSendUsernames.length;
     const labelEl = document.getElementById("recipients_toggle_label");
-    if (labelEl) labelEl.textContent = total > 0 ? `Ver y elegir destinatarios (${count}/${total})` : "Ver destinatarios";
-    updateRecipientsSummaryLabel(qs("#send_recipients_summary"), total, count, getRecipientsKindLabel(st));
+    if (labelEl)
+      labelEl.textContent =
+        total > 0 ? `Ver y elegir destinatarios (${count}/${total})` : "Ver destinatarios";
+    updateRecipientsSummaryLabel(
+      qs("#send_recipients_summary"),
+      total,
+      count,
+      getRecipientsKindLabel(st)
+    );
     if (count > 0) {
-      setSendInfoStatus(`${count} ${count === 1 ? "destinatario" : "destinatarios"} seleccionado${count === 1 ? "" : "s"}`);
+      setSendInfoStatus(
+        `${count} ${count === 1 ? "destinatario" : "destinatarios"} seleccionado${count === 1 ? "" : "s"}`
+      );
       setEnqueueSendEnabled(true);
     } else {
       setSendInfoStatus("Marcá al menos un destinatario para enviar.");
@@ -396,7 +448,9 @@ export function initSendTab(deps) {
           let senderRunning = false;
           if (inFlight) {
             try {
-              const senderStatus = await chrome.runtime.sendMessage({ action: "get_sender_status" });
+              const senderStatus = await chrome.runtime.sendMessage({
+                action: "get_sender_status",
+              });
               senderRunning = !!senderStatus?.isRunning;
             } catch {
               senderRunning = false;
@@ -419,17 +473,27 @@ export function initSendTab(deps) {
           return stats;
         }
         const summaryStatus = Number(summary?.error?.status || 0) || 0;
-        const summaryCode = String(summary?.error?.code || "UNKNOWN").trim().toUpperCase();
+        const summaryCode = String(summary?.error?.code || "UNKNOWN")
+          .trim()
+          .toUpperCase();
         try {
           const restored = await restoreSendProgressFromCache();
-          if (summaryStatus === 404 || summaryStatus === 422 || summaryCode === "RESULT_ID_REQUIRED") {
+          if (
+            summaryStatus === 404 ||
+            summaryStatus === 422 ||
+            summaryCode === "RESULT_ID_REQUIRED"
+          ) {
             await clearSendProgressCache();
             setState({ pendingCancelableSendJobId: null });
             updateSendSyncLabel();
             return restored || null;
           }
           if (!restored) {
-            console.warn("[send] No se pudo obtener summary de job:", jobId, summaryCode || summaryStatus || "UNKNOWN");
+            console.warn(
+              "[send] No se pudo obtener summary de job:",
+              jobId,
+              summaryCode || summaryStatus || "UNKNOWN"
+            );
           }
           updateSendSyncLabel();
           return restored;
@@ -494,11 +558,14 @@ export function initSendTab(deps) {
           const activeId = normalizeJobId(activeWork?.id, activeWork?.kind || "job");
           const cachedJobId = normalizeJobId(await getLastSendJobId());
           const pendingCancelableSendJobId = activeKind.includes("send")
-            ? (activeId || prevCancelableJobId || cachedJobId || null)
-            : (prevCancelableJobId || cachedJobId || null);
+            ? activeId || prevCancelableJobId || cachedJobId || null
+            : prevCancelableJobId || cachedJobId || null;
           setState({ pendingCancelableSendJobId });
           setEnqueueSendEnabled(false, "Esperá a que termine el trabajo en curso.");
-          setSendInfoStatus(describeActiveWorkForSend(activeWork), { force: true, source: "activity" });
+          setSendInfoStatus(describeActiveWorkForSend(activeWork), {
+            force: true,
+            source: "activity",
+          });
           updateSenderStatus();
           const infoEl = qs("#send_recipients_info");
           if (infoEl) infoEl.style.display = "none";
@@ -516,7 +583,11 @@ export function initSendTab(deps) {
           let keepCancelable = true;
           try {
             const prevSummary = await loadJobSummary(base, prevCancelableJobId);
-            const prevStatus = prevSummary?.ok ? String(prevSummary?.data?.status || "").trim().toLowerCase() : "";
+            const prevStatus = prevSummary?.ok
+              ? String(prevSummary?.data?.status || "")
+                  .trim()
+                  .toLowerCase()
+              : "";
             if (prevStatus && isTerminalSendJobStatus(prevStatus)) {
               keepCancelable = false;
             }
@@ -533,8 +604,15 @@ export function initSendTab(deps) {
         jobsWithPending.forEach((j) => {
           const opt = document.createElement("option");
           opt.value = j.id;
-          const resultadoUtil = j.pending != null ? `${j.pending} prospecto${j.pending === 1 ? "" : "s"}` : j.label;
-          opt.textContent = [resultadoUtil, formatJobDate(j.created_at), formatJobStatusLabel((j.status || "").toLowerCase())].filter(Boolean).join(" · ");
+          const resultadoUtil =
+            j.pending != null ? `${j.pending} prospecto${j.pending === 1 ? "" : "s"}` : j.label;
+          opt.textContent = [
+            resultadoUtil,
+            formatJobDate(j.created_at),
+            formatJobStatusLabel((j.status || "").toLowerCase()),
+          ]
+            .filter(Boolean)
+            .join(" · ");
           opt.dataset.kind = j.kind || "";
           sel.appendChild(opt);
         });
@@ -543,10 +621,15 @@ export function initSendTab(deps) {
         if (infoEl) infoEl.style.display = "none";
         if (jobsWithPending.length === 0) {
           sel.disabled = true;
-          setSendStatus("Todavía no hay resultados listos para enviar. Esperá a que termine el job/flow de análisis.", true);
+          setSendStatus(
+            "Todavía no hay resultados listos para enviar. Esperá a que termine el job/flow de análisis.",
+            true
+          );
         } else {
           sel.disabled = false;
-          setSendInfoStatus(`${jobsWithPending.length} origen${jobsWithPending.length === 1 ? "" : "es"} con pendientes. Elegí uno.`);
+          setSendInfoStatus(
+            `${jobsWithPending.length} origen${jobsWithPending.length === 1 ? "" : "es"} con pendientes. Elegí uno.`
+          );
         }
       } finally {
         refreshRecipientsInFlight = null;
@@ -558,9 +641,14 @@ export function initSendTab(deps) {
   async function onSendRecipientsJobChange(jobIdOrNull, kindOrNull) {
     const sel = qs("#send_recipients_job_select");
     const jobId = normalizeJobId(jobIdOrNull || (sel && sel.value) || null);
-    const kind = kindOrNull || (sel?.selectedOptions?.[0]?.dataset?.kind) || null;
+    const kind = kindOrNull || sel?.selectedOptions?.[0]?.dataset?.kind || null;
     if (!jobId) {
-      setState({ selectedSendJobId: null, selectedSendKind: null, selectedSendUsernames: [], selectedRecipientSet: new Set() });
+      setState({
+        selectedSendJobId: null,
+        selectedSendKind: null,
+        selectedSendUsernames: [],
+        selectedRecipientSet: new Set(),
+      });
       const infoEl = qs("#send_recipients_info");
       if (infoEl) infoEl.style.display = "none";
       const listEl = qs("#send_recipients_list");
@@ -586,16 +674,24 @@ export function initSendTab(deps) {
         setSendStatus(result?.error?.message || "Error al cargar destinatarios.", true);
         return;
       }
-      const data = result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
+      const data =
+        result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
       const usernames = data.usernames || [];
-      console.log('[SEND] Recipients loaded', { jobId, usernamesCount: usernames.length, pending_count: data.pending_count, total: data.total });
+      console.log("[SEND] Recipients loaded", {
+        jobId,
+        usernamesCount: usernames.length,
+        pending_count: data.pending_count,
+        total: data.total,
+      });
       setState({
         selectedSendJobId: normalizeJobId(jobId, kind || "job"),
         selectedSendKind: kind || "followings_flow",
         selectedSendUsernames: usernames,
         selectedRecipientSet: new Set(usernames),
       });
-      console.log('[SEND] State after loading recipients', { selectedRecipientSetSize: getState().selectedRecipientSet.size });
+      console.log("[SEND] State after loading recipients", {
+        selectedRecipientSetSize: getState().selectedRecipientSet.size,
+      });
       const infoEl = qs("#send_recipients_info");
       if (infoEl) infoEl.style.display = "block";
       const listEl = qs("#send_recipients_list");
@@ -603,7 +699,11 @@ export function initSendTab(deps) {
       const actionsEl = document.getElementById("recipients_actions");
       const summaryEl = qs("#send_recipients_summary");
       const kindLower = (kind || "").toLowerCase();
-      const kindLabel = kindLower.includes("flow") ? "prospectos" : (kindLower.includes("analyze") ? "perfiles" : "followings");
+      const kindLabel = kindLower.includes("flow")
+        ? "prospectos"
+        : kindLower.includes("analyze")
+          ? "perfiles"
+          : "followings";
       renderRecipients(
         { listEl, toggleEl, actionsEl, summaryEl },
         usernames,
@@ -621,25 +721,25 @@ export function initSendTab(deps) {
   }
 
   async function enqueueSendMessages() {
-    console.log('[SEND] enqueueSendMessages START');
+    console.log("[SEND] enqueueSendMessages START");
     const nowTs = Date.now();
     if (enqueueSendInFlight) {
-      console.log('[SEND] enqueueSendInFlight blocked');
+      console.log("[SEND] enqueueSendInFlight blocked");
       setSendStatus("Ya hay una solicitud de encolado en curso. Esperá un momento.", true);
       return false;
     }
     if (nowTs - lastEnqueueAttemptTs < ENQUEUE_CLICK_GUARD_MS) {
-      console.log('[SEND] click guard blocked');
+      console.log("[SEND] click guard blocked");
       setSendStatus("Esperá un instante antes de volver a encolar.", true);
       return false;
     }
     enqueueSendInFlight = true;
     lastEnqueueAttemptTs = nowTs;
-    console.log('[SEND] enqueueSendMessages proceeding');
+    console.log("[SEND] enqueueSendMessages proceeding");
 
     try {
       const cfg = await loadSettings();
-      console.log('[SEND] settings loaded', { hasApiBase: !!cfg.api_base });
+      console.log("[SEND] settings loaded", { hasApiBase: !!cfg.api_base });
       if (!cfg.api_base) {
         setSendStatus("Configura la API en Opciones.", true);
         enqueueSendInFlight = false;
@@ -647,15 +747,21 @@ export function initSendTab(deps) {
       }
       const accountCtx = await getFromAccountContext();
       const fromAccount = String(accountCtx.sendFromAccount || "").trim();
-      console.log('[SEND] fromAccount detected', { detected: !!fromAccount });
+      console.log("[SEND] fromAccount detected", { detected: !!fromAccount });
       if (!fromAccount) {
-        setSendStatus("Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.", true);
+        setSendStatus(
+          "Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.",
+          true
+        );
         enqueueSendInFlight = false;
         return false;
       }
       const st = getState();
       const toSend = [...st.selectedRecipientSet];
-      console.log('[SEND] toSend', { toSendCount: toSend.length, selectedSendJobId: st.selectedSendJobId });
+      console.log("[SEND] toSend", {
+        toSendCount: toSend.length,
+        selectedSendJobId: st.selectedSendJobId,
+      });
       if (!st.selectedSendJobId || toSend.length === 0) {
         setSendStatus("Elegí un origen de destinatarios y marcá al menos uno.", true);
         enqueueSendInFlight = false;
@@ -663,8 +769,15 @@ export function initSendTab(deps) {
       }
       const limitsData = getLimitsData();
       const remainingMonth = limitsData?.messages?.remaining_this_month;
-      if (remainingMonth != null && !isUnlimited(remainingMonth) && toSend.length > remainingMonth) {
-        setSendStatus(`Tu plan permite ${remainingMonth} mensaje${remainingMonth === 1 ? "" : "s"} este mes. No podés encolar ${toSend.length}.`, true);
+      if (
+        remainingMonth != null &&
+        !isUnlimited(remainingMonth) &&
+        toSend.length > remainingMonth
+      ) {
+        setSendStatus(
+          `Tu plan permite ${remainingMonth} mensaje${remainingMonth === 1 ? "" : "s"} este mes. No podés encolar ${toSend.length}.`,
+          true
+        );
         return false;
       }
       const apiLimits = getState().apiLimits;
@@ -676,11 +789,17 @@ export function initSendTab(deps) {
           return false;
         }
         if (message.length < apiLimits.min_message_length) {
-          setSendStatus(`El mensaje es muy corto (mínimo ${apiLimits.min_message_length} caracteres).`, true);
+          setSendStatus(
+            `El mensaje es muy corto (mínimo ${apiLimits.min_message_length} caracteres).`,
+            true
+          );
           return false;
         }
         if (message.length > apiLimits.max_message_length) {
-          setSendStatus(`El mensaje es muy largo (máximo ${apiLimits.max_message_length} caracteres).`, true);
+          setSendStatus(
+            `El mensaje es muy largo (máximo ${apiLimits.max_message_length} caracteres).`,
+            true
+          );
           return false;
         }
       } else {
@@ -690,102 +809,123 @@ export function initSendTab(deps) {
           return false;
         }
         if (prompt.length > apiLimits.max_client_prompt_length) {
-          setSendStatus(`El prompt de IA es muy largo (máximo ${apiLimits.max_client_prompt_length} caracteres). Configuralo en Opciones.`, true);
+          setSendStatus(
+            `El prompt de IA es muy largo (máximo ${apiLimits.max_client_prompt_length} caracteres). Configuralo en Opciones.`,
+            true
+          );
           return false;
         }
       }
-      console.log('[SEND] Validations passed', { useChatgpt, messageLength: message.length });
-    const dryRun = qs("#dry_run") ? qs("#dry_run").checked : true;
-    if (!dryRun && !confirm("Vas a enviar mensajes realmente. ¿Continuar?")) return false;
+      console.log("[SEND] Validations passed", { useChatgpt, messageLength: message.length });
+      const dryRun = qs("#dry_run") ? qs("#dry_run").checked : true;
+      if (!dryRun && !confirm("Vas a enviar mensajes realmente. ¿Continuar?")) return false;
 
-    const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-    const dedupeMessageTemplate = useChatgpt ? (cfg.chatgpt_prompt || "").trim() : message;
-    const { idempotencyKey, messageHash, recipientIdempotencyKeys } = await buildSendIdempotency(
-      fromAccount,
-      toSend,
-      dedupeMessageTemplate,
-      st.selectedSendJobId,
-      dryRun,
-      useChatgpt
-    );
-    setSendInfoStatus(useChatgpt ? "Encolando con IA..." : "Encolando mensajes...", { force: true });
-    setEnqueueSendEnabled(false, "Encolando...");
-    console.log('[SEND] About to call send enqueue', { base, toSendCount: toSend.length, useChatgpt });
-    const result = await apiFetch(base, API_PATHS.sendEnqueue, {
-      method: "POST",
-      headers: {
-        "Idempotency-Key": idempotencyKey,
-      },
-      body: {
-        from_account: fromAccount,
-        usernames: toSend,
-        message_template: message || "",
-        message_template_hash: messageHash,
-        idempotency_key: idempotencyKey,
-        idempotency_version: 2,
-        recipient_idempotency_keys: recipientIdempotencyKeys,
-        source_job_id: st.selectedSendJobId,
-        dry_run: dryRun,
-        use_ai: useChatgpt,
-        client_prompt: useChatgpt ? (cfg.chatgpt_prompt || "").trim() : undefined,
-      },
-    });
-    const payload = result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
-    console.log('[SEND] send enqueue result', { ok: result.ok, status: result.status, errorCode: result?.error?.code || null, jobId: payload?.job_id });
-    if (!result.ok) {
-      const errorCode = String(result?.error?.code || result?.data?.error?.code || "").trim().toUpperCase();
-      const blockingQuota =
-        result?.error?.details?.blocking_quota ||
-        result?.data?.error?.details?.blocking_quota ||
-        "";
-      const isActiveConflict =
-        result.status === 409 && (
-          ACTIVE_CONFLICT_ERROR_CODES.has(errorCode) ||
-          blockingQuota === "active_job_by_client" ||
-          blockingQuota === "enqueue_lock_busy"
-        );
-      if (isActiveConflict) {
-        setEnqueueSendEnabled(false, "Esperá a que termine el trabajo en curso.");
-        setSendInfoStatus("Hay un trabajo en curso. Cuando termine, vas a poder encolar mensajes.", { force: true });
-        await refreshRecipients(true);
+      const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
+      const dedupeMessageTemplate = useChatgpt ? (cfg.chatgpt_prompt || "").trim() : message;
+      const { idempotencyKey, messageHash, recipientIdempotencyKeys } = await buildSendIdempotency(
+        fromAccount,
+        toSend,
+        dedupeMessageTemplate,
+        st.selectedSendJobId,
+        dryRun,
+        useChatgpt
+      );
+      setSendInfoStatus(useChatgpt ? "Encolando con IA..." : "Encolando mensajes...", {
+        force: true,
+      });
+      setEnqueueSendEnabled(false, "Encolando...");
+      console.log("[SEND] About to call send enqueue", {
+        base,
+        toSendCount: toSend.length,
+        useChatgpt,
+      });
+      const result = await apiFetch(base, API_PATHS.sendEnqueue, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: {
+          from_account: fromAccount,
+          usernames: toSend,
+          message_template: message || "",
+          message_template_hash: messageHash,
+          idempotency_key: idempotencyKey,
+          idempotency_version: 2,
+          recipient_idempotency_keys: recipientIdempotencyKeys,
+          source_job_id: st.selectedSendJobId,
+          dry_run: dryRun,
+          use_ai: useChatgpt,
+          client_prompt: useChatgpt ? (cfg.chatgpt_prompt || "").trim() : undefined,
+        },
+      });
+      const payload =
+        result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
+      console.log("[SEND] send enqueue result", {
+        ok: result.ok,
+        status: result.status,
+        errorCode: result?.error?.code || null,
+        jobId: payload?.job_id,
+      });
+      if (!result.ok) {
+        const errorCode = String(result?.error?.code || result?.data?.error?.code || "")
+          .trim()
+          .toUpperCase();
+        const blockingQuota =
+          result?.error?.details?.blocking_quota ||
+          result?.data?.error?.details?.blocking_quota ||
+          "";
+        const isActiveConflict =
+          result.status === 409 &&
+          (ACTIVE_CONFLICT_ERROR_CODES.has(errorCode) ||
+            blockingQuota === "active_job_by_client" ||
+            blockingQuota === "enqueue_lock_busy");
+        if (isActiveConflict) {
+          setEnqueueSendEnabled(false, "Esperá a que termine el trabajo en curso.");
+          setSendInfoStatus(
+            "Hay un trabajo en curso. Cuando termine, vas a poder encolar mensajes.",
+            { force: true }
+          );
+          await refreshRecipients(true);
+          return false;
+        }
+        const noPendingRecipients =
+          result.status === 400 &&
+          (NO_PENDING_ERROR_CODES.has(errorCode) || blockingQuota === "already_messaged");
+        if (noPendingRecipients) {
+          setSendInfoStatus("No hay pendientes: ya fueron enviados o están en cola.", {
+            force: true,
+          });
+          setEnqueueSendEnabled(false, "No hay pendientes para encolar.");
+        } else {
+          setEnqueueSendEnabled(getSelectedRecipients().length > 0);
+          setSendStatus(result?.error?.message || "Error", true);
+        }
         return false;
       }
-      const noPendingRecipients =
-        result.status === 400 &&
-        (NO_PENDING_ERROR_CODES.has(errorCode) || blockingQuota === "already_messaged");
-      if (noPendingRecipients) {
-        setSendInfoStatus("No hay pendientes: ya fueron enviados o están en cola.", { force: true });
-        setEnqueueSendEnabled(false, "No hay pendientes para encolar.");
-      } else {
+      const jobId = normalizeJobId(payload?.job_id || "");
+      const total = payload?.total_items || 0;
+      if (!jobId || total <= 0) {
+        const deduped = Number(payload?.deduped_count || 0);
+        if (deduped > 0) {
+          setSendStatus(
+            `No se encolaron mensajes: ${deduped} destinatario(s) ya estaban dedupeados para esta configuración.`,
+            true
+          );
+        } else {
+          setSendStatus("No se encolaron mensajes para los destinatarios seleccionados.", true);
+        }
         setEnqueueSendEnabled(getSelectedRecipients().length > 0);
-        setSendStatus(result?.error?.message || "Error", true);
+        return false;
       }
-      return false;
-    }
-    const jobId = normalizeJobId(payload?.job_id || "");
-    const total = payload?.total_items || 0;
-    if (!jobId || total <= 0) {
-      const deduped = Number(payload?.deduped_count || 0);
-      if (deduped > 0) {
-        setSendStatus(
-          `No se encolaron mensajes: ${deduped} destinatario(s) ya estaban dedupeados para esta configuración.`,
-          true
-        );
-      } else {
-        setSendStatus("No se encolaron mensajes para los destinatarios seleccionados.", true);
-      }
-      setEnqueueSendEnabled(getSelectedRecipients().length > 0);
-      return false;
-    }
-    chrome.storage.local.set({ last_send_job_id: jobId });
-    if (typeof refreshLimitsWithCache === "function") refreshLimitsWithCache(true);
-    setSendInfoStatus(`Encolados ${total} mensajes`, { force: true });
-    const section = qs("#send_job_progress_section");
-    if (section) section.style.display = "block";
-    await onSendRecipientsJobChange(st.selectedSendJobId, st.selectedSendKind);
-    const stats = await refreshSendProgress();
-    if (stats && (stats.queued || 0) + (stats.sent || 0) > 0) startSendProgressPolling();
-    return true;
+      chrome.storage.local.set({ last_send_job_id: jobId });
+      if (typeof refreshLimitsWithCache === "function") refreshLimitsWithCache(true);
+      setSendInfoStatus(`Encolados ${total} mensajes`, { force: true });
+      const section = qs("#send_job_progress_section");
+      if (section) section.style.display = "block";
+      await onSendRecipientsJobChange(st.selectedSendJobId, st.selectedSendKind);
+      const stats = await refreshSendProgress();
+      if (stats && (stats.queued || 0) + (stats.sent || 0) > 0) startSendProgressPolling();
+      return true;
     } finally {
       enqueueSendInFlight = false;
     }
@@ -808,7 +948,10 @@ export function initSendTab(deps) {
     try {
       const selectedRecipients = getSelectedRecipients();
       const hasSelectedRecipients = selectedRecipients.length > 0;
-      console.log('[SEND] startSender called', { hasSelectedRecipients, selectedRecipientsCount: selectedRecipients.length });
+      console.log("[SEND] startSender called", {
+        hasSelectedRecipients,
+        selectedRecipientsCount: selectedRecipients.length,
+      });
       const startBtn = qs("#start_sender");
       if (startBtn) startBtn.disabled = true;
 
@@ -827,7 +970,7 @@ export function initSendTab(deps) {
         defer_first_pull: false,
         allow_idle_start: hasSelectedRecipients,
       });
-      console.log('[SEND] start_sender result', result);
+      console.log("[SEND] start_sender result", result);
       if (result?.status !== "started") {
         if (result?.status === "already_running" || result?.status === "starting") {
           setSendInfoStatus("El sender ya está en ejecución.", { force: true });
@@ -852,7 +995,10 @@ export function initSendTab(deps) {
           return;
         }
         if (result?.reason === "sender_offline") {
-          setSendStatus("No hay sender activo para esta cuenta. Abrí Instagram e iniciá sesión.", true);
+          setSendStatus(
+            "No hay sender activo para esta cuenta. Abrí Instagram e iniciá sesión.",
+            true
+          );
         } else {
           setSendStatus("No se pudo iniciar el envío.", true);
         }
@@ -918,13 +1064,20 @@ export function initSendTab(deps) {
 
       if (canceledInfo?.ok && canceledInfo?.data?.cancel) {
         const sentConfirmed = Number(canceledInfo.data.cancel.sent_confirmed || 0);
-        setSendInfoStatus(`Envío detenido. Job cancelado (ya enviados: ${sentConfirmed}).`, { force: true });
+        setSendInfoStatus(`Envío detenido. Job cancelado (ya enviados: ${sentConfirmed}).`, {
+          force: true,
+        });
         setState({ pendingCancelableSendJobId: null });
       } else if (canceledJobId) {
         const attempts = Number(canceledInfo?.attempts || CANCEL_JOB_RETRY_DELAYS_MS.length);
-        const reason = String(canceledInfo?.error || "No se pudo cancelar el job en el servidor.").trim();
+        const reason = String(
+          canceledInfo?.error || "No se pudo cancelar el job en el servidor."
+        ).trim();
         setState({ pendingCancelableSendJobId: canceledJobId });
-        setSendStatus(`Envío detenido en la extensión, pero falló la cancelación remota tras ${attempts} intento(s): ${reason}. Reintentá "Detener envío".`, true);
+        setSendStatus(
+          `Envío detenido en la extensión, pero falló la cancelación remota tras ${attempts} intento(s): ${reason}. Reintentá "Detener envío".`,
+          true
+        );
       } else if (result?.status === "stopped") {
         setSendInfoStatus("Listo", { force: true });
       } else {
@@ -1030,9 +1183,9 @@ export function initSendTab(deps) {
       if (countEl) countEl.textContent = count;
       if (sendMessageInput) {
         sendMessageInput.placeholder = useChatgpt
-         ? "Opcional: agregá contexto o indicaciones adicionales para que la IA genere el mensaje."
-         : "Escribe el mensaje que querés enviar...";
-        }
+          ? "Opcional: agregá contexto o indicaciones adicionales para que la IA genere el mensaje."
+          : "Escribe el mensaje que querés enviar...";
+      }
       if (sendMessageHint) sendMessageHint.textContent = `Caracteres: ${count}/${maxMsg}`;
     }
 

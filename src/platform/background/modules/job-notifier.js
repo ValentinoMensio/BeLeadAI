@@ -17,7 +17,9 @@
     let bootstrapDone = false;
 
     function normalizeStatus(status) {
-      const raw = String(status || "").trim().toLowerCase();
+      const raw = String(status || "")
+        .trim()
+        .toLowerCase();
       if (!raw) return "";
       if (raw === "queued" || raw === "open") return "pending";
       if (raw === "in_progress" || raw === "processing") return "running";
@@ -36,7 +38,9 @@
     }
 
     function bodyForKind(kind, source) {
-      const kindLower = String(kind || "").trim().toLowerCase();
+      const kindLower = String(kind || "")
+        .trim()
+        .toLowerCase();
       if (source === "flow" || kindLower.includes("flow")) return "Flujo completado";
       if (kindLower.includes("send")) return "Envio completado";
       if (kindLower.includes("analyze")) return "Analisis completado";
@@ -59,7 +63,9 @@
     function extractCancelInfo(entryValue) {
       const extra = parseExtraJson(entryValue?.extra_json);
       const cancel = extra && typeof extra.cancel === "object" ? extra.cancel : null;
-      const reason = String(cancel?.reason || "").trim().toLowerCase();
+      const reason = String(cancel?.reason || "")
+        .trim()
+        .toLowerCase();
       return {
         canceled: !!cancel,
         cancelReason: reason,
@@ -82,11 +88,18 @@
     function buildApiUrl(baseUrl, apiPath, query = null) {
       const url = new URL(String(baseUrl || "").trim());
       const prefixRaw = String(url.pathname || "").trim();
-      const prefix = !prefixRaw || prefixRaw === "/"
-        ? ""
-        : (prefixRaw.endsWith("/") ? prefixRaw.slice(0, -1) : prefixRaw);
-      const [pathPart, queryPart = ""] = String(apiPath || "").trim().split("?");
-      const cleanPath = `/${String(pathPart || "").trim().replace(/^\/+/, "")}`;
+      const prefix =
+        !prefixRaw || prefixRaw === "/"
+          ? ""
+          : prefixRaw.endsWith("/")
+            ? prefixRaw.slice(0, -1)
+            : prefixRaw;
+      const [pathPart, queryPart = ""] = String(apiPath || "")
+        .trim()
+        .split("?");
+      const cleanPath = `/${String(pathPart || "")
+        .trim()
+        .replace(/^\/+/, "")}`;
       url.pathname = `${prefix}${cleanPath}`.replace(/\/+/g, "/");
       const search = new URLSearchParams(queryPart);
       if (query && typeof query === "object") {
@@ -118,7 +131,8 @@
     async function saveNotifyState(nextState) {
       notifyStateCache = {
         ownerKey: String(nextState?.ownerKey || ""),
-        entries: nextState?.entries && typeof nextState.entries === "object" ? nextState.entries : {},
+        entries:
+          nextState?.entries && typeof nextState.entries === "object" ? nextState.entries : {},
       };
       await storageModule.saveState({ [NOTIFY_STATE_KEY]: notifyStateCache });
     }
@@ -161,7 +175,9 @@
 
     async function fetchCurrentSnapshot() {
       const cfg = await authModule.loadSettings();
-      const base = String(cfg?.api_base || "").trim().replace(/\/+$/, "");
+      const base = String(cfg?.api_base || "")
+        .trim()
+        .replace(/\/+$/, "");
       if (!base || !authModule.isSecureApiBase(base)) return null;
 
       const headers = await authModule.getAuthHeaders(cfg);
@@ -221,7 +237,9 @@
       if (!chrome.notifications?.create) return;
       const notificationId = `task-finished:${entry.source}:${entry.id}:${Date.now()}`;
       const body = bodyForKind(entry.kind, entry.source);
-      const iconUrl = chrome.runtime?.getURL ? chrome.runtime.getURL("icons/logo.png") : "icons/logo.png";
+      const iconUrl = chrome.runtime?.getURL
+        ? chrome.runtime.getURL("icons/logo.png")
+        : "icons/logo.png";
       await new Promise((resolve) => {
         chrome.notifications.create(
           notificationId,
@@ -248,7 +266,7 @@
 
       const previous = await loadNotifyState();
       const ownerChanged = !!previous.ownerKey && previous.ownerKey !== current.ownerKey;
-      const prevEntries = ownerChanged ? {} : (previous.entries || {});
+      const prevEntries = ownerChanged ? {} : previous.entries || {};
       const silentMode = !!silent || ownerChanged || !bootstrapDone;
 
       if (!silentMode) {

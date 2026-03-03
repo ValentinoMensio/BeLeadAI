@@ -35,7 +35,9 @@ const ENTITY_PREFIX_TO_TYPE = Object.freeze({
 });
 
 export function normalizeJobStatus(status) {
-  const raw = String(status || "").trim().toLowerCase();
+  const raw = String(status || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "";
   return STATUS_ALIASES[raw] || raw;
 }
@@ -55,7 +57,9 @@ export function isActiveJobStatus(status) {
 }
 
 export function normalizeEntityType(type) {
-  const raw = String(type || "").trim().toLowerCase();
+  const raw = String(type || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "job";
   if (raw === "followings_flow" || raw === "flow") return "flow";
   if (raw === "result" || raw === "results") return "result";

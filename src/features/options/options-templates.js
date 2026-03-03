@@ -5,7 +5,7 @@ export function renderPendingLinkAccountCard(tabAccount, limitStr, resetText, es
     ' <span style="color:var(--muted);font-weight:400;font-size:11px;">(en pestaña, aún no enlazada)</span></div>' +
     '<div class="quotas-row"><span class="quotas-label">24h</span><div class="quotas-progress-wrap"><div class="progress"><div style="width:0%"></div></div></div><span class="quotas-value">0 / ' +
     limitStr +
-    '</span></div>' +
+    "</span></div>" +
     '<div class="progress-text">' +
     escapeHtml(resetText) +
     "</div>"

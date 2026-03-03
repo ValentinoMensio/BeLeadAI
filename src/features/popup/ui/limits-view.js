@@ -115,7 +115,8 @@ async function fetchLimits(signal = null) {
       return {
         data: null,
         status: 0,
-        errorMessage: "No se pudo detectar from_account. Abrí Instagram o configurá una cuenta default en la API.",
+        errorMessage:
+          "No se pudo detectar from_account. Abrí Instagram o configurá una cuenta default en la API.",
       };
     }
 
@@ -232,7 +233,13 @@ function renderLimitsSummary(data, options = {}) {
   }
 
   if (alertEl) {
-    alertEl.classList.remove("open", "blocked-daily", "blocked-monthly", "blocked-analyses", "blocked-hourly");
+    alertEl.classList.remove(
+      "open",
+      "blocked-daily",
+      "blocked-monthly",
+      "blocked-analyses",
+      "blocked-hourly"
+    );
     alertEl.innerHTML = "";
     const dryRunEl = document.getElementById("dry_run");
     const sandboxNote = dryRunEl?.checked ? " Simulando (no se envía realmente)." : "";
@@ -312,12 +319,19 @@ function showLimitDetail(type) {
   const planName = limitsData.plan_name || "Basic";
 
   const borderClass = type === "day" ? classDay : classMonth;
-  const borderMap = { "limit-ok": "border-ok", "limit-warn": "border-warn", "limit-blocked": "border-blocked" };
+  const borderMap = {
+    "limit-ok": "border-ok",
+    "limit-warn": "border-warn",
+    "limit-blocked": "border-blocked",
+  };
 
   if (type === "day") {
     const accounts = Array.isArray(limitsData.accounts) ? limitsData.accounts : [];
-    const loggedInAccount = accounts.find((a) => (a.username || "").toLowerCase() === (currentFromAccount || "").toLowerCase());
-    const resetAt = loggedInAccount?.reset_at || (accounts.length > 0 ? accounts[0]?.reset_at : null);
+    const loggedInAccount = accounts.find(
+      (a) => (a.username || "").toLowerCase() === (currentFromAccount || "").toLowerCase()
+    );
+    const resetAt =
+      loggedInAccount?.reset_at || (accounts.length > 0 ? accounts[0]?.reset_at : null);
     const resetIn = formatResetIn(resetAt);
     const resetLabel =
       usedToday === 0
@@ -350,7 +364,11 @@ export async function refreshLimitsWithCache(forceRefresh = false) {
   if (widgetEl) widgetEl.style.display = "block";
   summaryEl.classList.add("loading");
 
-  const opts = (ts, fromCache = false, fetchError = false) => ({ updateTs: ts, fromCache, fetchError });
+  const opts = (ts, fromCache = false, fetchError = false) => ({
+    updateTs: ts,
+    fromCache,
+    fetchError,
+  });
 
   const cached = await getLimitsFromCache();
   if (cached?.data) {

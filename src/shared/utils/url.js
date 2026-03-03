@@ -12,7 +12,9 @@ function normalizeApiPath(path) {
 
 export function buildApiUrl(baseUrl, apiPath, queryParams = null) {
   const url = new URL(String(baseUrl || "").trim());
-  const [pathPart, queryPart = ""] = String(apiPath || "").trim().split("?");
+  const [pathPart, queryPart = ""] = String(apiPath || "")
+    .trim()
+    .split("?");
   const prefix = normalizePrefix(url.pathname);
   url.pathname = `${prefix}${normalizeApiPath(pathPart)}`.replace(/\/+/g, "/");
 

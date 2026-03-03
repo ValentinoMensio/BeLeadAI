@@ -32,7 +32,8 @@ export function initSetup(deps) {
   const { qs } = dom;
 
   function updateSetupChecklist(cfg, opts = {}) {
-    const apiOk = opts.apiReachable !== undefined ? opts.apiReachable : isValidApiBase(cfg.api_base);
+    const apiOk =
+      opts.apiReachable !== undefined ? opts.apiReachable : isValidApiBase(cfg.api_base);
     const tokenOk = opts.tokenOk !== undefined ? opts.tokenOk : hasAuth(cfg);
     const checkApi = qs("#check-api");
     const checkToken = qs("#check-token");
@@ -56,13 +57,18 @@ export function initSetup(deps) {
     const sendHintEl = document.getElementById("send-tab-account-hint");
     try {
       const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
-      const tabDisplay = r?.username ? "@" + r.username : r?.user_id != null ? "ID: " + r.user_id : "";
+      const tabDisplay = r?.username
+        ? "@" + r.username
+        : r?.user_id != null
+          ? "ID: " + r.user_id
+          : "";
       if (tabDisplay) {
         if (labelEl) labelEl.textContent = "Cuenta en pestaña: " + tabDisplay;
         if (iconEl) iconEl.textContent = "✓";
         if (rowEl) {
           rowEl.className = "checklist-item ok";
-          rowEl.title = "Los DMs se envían desde la cuenta con la que estés logueado en la pestaña de Instagram.";
+          rowEl.title =
+            "Los DMs se envían desde la cuenta con la que estés logueado en la pestaña de Instagram.";
         }
         if (sendHintEl) {
           sendHintEl.textContent = "Enviarás desde: " + tabDisplay;
@@ -70,7 +76,11 @@ export function initSetup(deps) {
         }
       } else {
         const err = r?.error || "desconocido";
-        if (labelEl) labelEl.textContent = err === "no_instagram_tab" ? "Cuenta en pestaña: abrí instagram.com" : "Cuenta en pestaña: no detectada";
+        if (labelEl)
+          labelEl.textContent =
+            err === "no_instagram_tab"
+              ? "Cuenta en pestaña: abrí instagram.com"
+              : "Cuenta en pestaña: no detectada";
         if (iconEl) iconEl.textContent = "○";
         if (rowEl) {
           rowEl.className = "checklist-item missing";
@@ -89,7 +99,8 @@ export function initSetup(deps) {
       if (iconEl) iconEl.textContent = "○";
       if (rowEl) rowEl.className = "checklist-item missing";
       if (sendHintEl) {
-        sendHintEl.textContent = "Enviarás desde: — (abrí instagram.com en una pestaña para ver la cuenta)";
+        sendHintEl.textContent =
+          "Enviarás desde: — (abrí instagram.com en una pestaña para ver la cuenta)";
         sendHintEl.style.color = "";
       }
     }

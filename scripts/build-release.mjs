@@ -6,13 +6,7 @@ import { resolve } from "node:path";
 const root = resolve(process.cwd());
 const dist = resolve(root, "dist");
 
-const releaseFiles = [
-  "manifest.json",
-  "popup.html",
-  "options.html",
-  "icons",
-  "src",
-];
+const releaseFiles = ["manifest.json", "popup.html", "options.html", "icons", "src"];
 
 async function ensureExists(path) {
   await access(path, constants.R_OK);

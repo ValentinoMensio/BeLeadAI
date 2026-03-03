@@ -3,7 +3,11 @@
  */
 
 import { API_PATHS } from "../../../config/endpoints.js";
-import { isTerminalJobStatus, normalizeEntityType, normalizeJobStatus } from "../../../shared/domain/job-contract.js";
+import {
+  isTerminalJobStatus,
+  normalizeEntityType,
+  normalizeJobStatus,
+} from "../../../shared/domain/job-contract.js";
 
 const DEEP_RUBROS_OPTIONS = [
   "Health_Medical",
@@ -89,7 +93,14 @@ function toCanonicalResultId(value, kindHint = "job") {
 export function initFetchTab(deps) {
   const { store, services, ui, dom } = deps;
   const { getState, setState } = store;
-  const { loadSettings, saveSettings, getAuthHeaders, apiFetch, loadLastJobsService, loadJobSummary } = services;
+  const {
+    loadSettings,
+    saveSettings,
+    getAuthHeaders,
+    apiFetch,
+    loadLastJobsService,
+    loadJobSummary,
+  } = services;
   const { setStatus, renderJobsList, renderJobDetails, getLimitsData } = ui;
   const { qs } = dom;
 
@@ -126,15 +137,18 @@ export function initFetchTab(deps) {
 
   function scheduleDelayedProgressRefresh(delayMs = 1000) {
     clearDelayedProgressTimer();
-    delayedProgressTimerId = setTimeout(async () => {
-      delayedProgressTimerId = null;
-      try {
-        await refreshSelectedJobProgress();
-        startAutoRefresh(5000);
-      } catch {
-        setFetchStatus("No se pudo refrescar el estado del job.", true);
-      }
-    }, Math.max(0, Number(delayMs || 0)));
+    delayedProgressTimerId = setTimeout(
+      async () => {
+        delayedProgressTimerId = null;
+        try {
+          await refreshSelectedJobProgress();
+          startAutoRefresh(5000);
+        } catch {
+          setFetchStatus("No se pudo refrescar el estado del job.", true);
+        }
+      },
+      Math.max(0, Number(delayMs || 0))
+    );
   }
 
   function shouldPollJobProgress(stats) {
@@ -206,7 +220,9 @@ export function initFetchTab(deps) {
         return null;
       }
       const summaryStatus = Number(mainSummary?.error?.status || 0);
-      const summaryCode = String(mainSummary?.error?.code || "").trim().toUpperCase();
+      const summaryCode = String(mainSummary?.error?.code || "")
+        .trim()
+        .toUpperCase();
       if (summaryStatus === 404 || summaryStatus === 422 || summaryCode === "RESULT_ID_REQUIRED") {
         setFetchStatus("No se encontro el resultado", true);
         setState({ currentJobId: null });
@@ -251,7 +267,10 @@ export function initFetchTab(deps) {
     const analyzeSummary = analyzeJobId ? await loadJobSummary(base, analyzeJobId) : null;
     const analyzeExists = !!(analyzeSummary?.ok && analyzeSummary?.data);
     const analyzeStats = analyzeExists ? analyzeSummary.data : null;
-    const sameCanonical = analyzeExists && mainStats.resolved_job_id && mainStats.resolved_job_id === analyzeStats.resolved_job_id;
+    const sameCanonical =
+      analyzeExists &&
+      mainStats.resolved_job_id &&
+      mainStats.resolved_job_id === analyzeStats.resolved_job_id;
     const hasAnalyze = analyzeExists && !sameCanonical;
     if (hasAnalyze) {
       return {
@@ -301,7 +320,11 @@ export function initFetchTab(deps) {
         }
         const stats = await checkJobStatus(currentJobId);
         if (stats) {
-          renderJobDetails(null, stats, (qs("#last_jobs_select")?.selectedOptions?.[0]?.dataset?.kind) || "");
+          renderJobDetails(
+            null,
+            stats,
+            qs("#last_jobs_select")?.selectedOptions?.[0]?.dataset?.kind || ""
+          );
           syncAutoRefresh(stats);
         } else {
           const prog = document.getElementById("job_progress");
@@ -347,7 +370,9 @@ export function initFetchTab(deps) {
         const opt = document.createElement("option");
         opt.value = resultId;
         opt.textContent = "Recién encolado";
-        opt.dataset.kind = String(kind || "").trim().toLowerCase();
+        opt.dataset.kind = String(kind || "")
+          .trim()
+          .toLowerCase();
         sel.appendChild(opt);
       }
       sel.value = resultId;
@@ -368,7 +393,9 @@ export function initFetchTab(deps) {
     const opt = document.createElement("option");
     opt.value = id;
     opt.textContent = "En curso...";
-    opt.dataset.kind = String(kind || "").trim().toLowerCase();
+    opt.dataset.kind = String(kind || "")
+      .trim()
+      .toLowerCase();
     selectEl.appendChild(opt);
     selectEl.value = id;
     return true;
@@ -401,7 +428,10 @@ export function initFetchTab(deps) {
         if (!sel) return;
         const currentJobId = getState().currentJobId;
         const runningJobId = pickRunningJobId(extractJobs);
-        const preferredJobId = toCanonicalResultId(runningJobId || savedJobId || currentJobId || "", "result");
+        const preferredJobId = toCanonicalResultId(
+          runningJobId || savedJobId || currentJobId || "",
+          "result"
+        );
         renderJobsList(sel, extractJobs, {
           selectedJobId: preferredJobId,
         });
@@ -448,7 +478,10 @@ export function initFetchTab(deps) {
         fromAccount = ((r?.user_id != null ? String(r.user_id) : "") || r?.username || "").trim();
       } catch {}
       if (!fromAccount) {
-        return setFetchStatus("Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.", true);
+        return setFetchStatus(
+          "Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.",
+          true
+        );
       }
       const target = (qs("#target") && qs("#target").value) || "";
       let limit = parseInt((qs("#limit") && qs("#limit").value) || "50", 10);
@@ -457,10 +490,16 @@ export function initFetchTab(deps) {
       const remainingMsgs = getRemainingMessagesForLeads();
       if (Number.isFinite(remainingMsgs)) {
         if (remainingMsgs <= 0) {
-          return setFetchStatus("No tenés mensajes disponibles para generar nuevos leads en este momento.", true);
+          return setFetchStatus(
+            "No tenés mensajes disponibles para generar nuevos leads en este momento.",
+            true
+          );
         }
         if (limit > remainingMsgs) {
-          return setFetchStatus(`Leads excede mensajes restantes (${remainingMsgs}). Reducí la cantidad.`, true);
+          return setFetchStatus(
+            `Leads excede mensajes restantes (${remainingMsgs}). Reducí la cantidad.`,
+            true
+          );
         }
       }
       const depthChecked = document.querySelector('input[name="analysis_depth"]:checked');
@@ -473,20 +512,29 @@ export function initFetchTab(deps) {
       };
       if (analysisDepthMode === "only_rubros") {
         const deepRubros = window.selectedDeepRubros
-          ? Array.from(window.selectedDeepRubros).map(toCanonicalDeepRubro).filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
+          ? Array.from(window.selectedDeepRubros)
+              .map(toCanonicalDeepRubro)
+              .filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
           : [];
         if (deepRubros.length === 0) {
-          return setFetchStatus("No se hará análisis profundo a ningún perfil. Elegí al menos una categoría.", true);
+          return setFetchStatus(
+            "No se hará análisis profundo a ningún perfil. Elegí al menos una categoría.",
+            true
+          );
         }
         followingsBody.deep_rubros = deepRubros;
       }
       const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-      const result = await apiFetch(base, API_PATHS.followingsEnqueue, { method: "POST", body: followingsBody });
+      const result = await apiFetch(base, API_PATHS.followingsEnqueue, {
+        method: "POST",
+        body: followingsBody,
+      });
       setFetchStatus("Encolando job...", false, { force: true });
       if (!result.ok) {
         return setFetchStatus(result?.error?.message || "Error", true);
       }
-      const payload = result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
+      const payload =
+        result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
       const flowId = toCanonicalResultId(payload?.flow_id || "", "flow");
       const jobId = toCanonicalResultId(flowId || payload?.job_id || "", flowId ? "flow" : "job");
       setFetchStatus(flowId ? "Flow encolado" : "Job encolado", false, { force: true });
@@ -518,7 +566,8 @@ export function initFetchTab(deps) {
     if (!result.ok) {
       return setFetchStatus(result?.error?.message || "Error", true);
     }
-    const payload = result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
+    const payload =
+      result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
     const jobId = toCanonicalResultId(payload?.job_id || "", "job");
     const totalItems = payload?.total_items || usernames.length;
     setFetchStatus(`${totalItems} perfiles encolados`, false, { force: true });
@@ -550,7 +599,9 @@ export function initFetchTab(deps) {
       return;
     }
     const deepRubros = window.selectedDeepRubros
-      ? Array.from(window.selectedDeepRubros).map(toCanonicalDeepRubro).filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
+      ? Array.from(window.selectedDeepRubros)
+          .map(toCanonicalDeepRubro)
+          .filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
       : [];
     const noDeep = deepRubros.length === 0;
     warningEl.style.display = noDeep ? "block" : "none";
@@ -623,8 +674,14 @@ export function initFetchTab(deps) {
     if (limitInput) {
       const minusBtn = limitInput.closest(".limit-stepper")?.querySelector(".limit-stepper-minus");
       const plusBtn = limitInput.closest(".limit-stepper")?.querySelector(".limit-stepper-plus");
-      const onMinus = () => { limitInput.stepDown(); limitInput.dispatchEvent(new Event("change", { bubbles: true })); };
-      const onPlus = () => { limitInput.stepUp(); limitInput.dispatchEvent(new Event("change", { bubbles: true })); };
+      const onMinus = () => {
+        limitInput.stepDown();
+        limitInput.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      const onPlus = () => {
+        limitInput.stepUp();
+        limitInput.dispatchEvent(new Event("change", { bubbles: true }));
+      };
       const onLimitChange = () => enforceLimitInputByRemainingMessages(false);
       if (minusBtn) {
         minusBtn.addEventListener("click", onMinus);
@@ -653,7 +710,8 @@ export function initFetchTab(deps) {
         const c = await loadSettings();
         if (!c.api_base) return setFetchStatus("Configura la API en Opciones.", true);
         const h = await getAuthHeaders();
-        if (!h.Authorization) return setFetchStatus("No hay sesión activa. Abrí Opciones para reautenticar.", true);
+        if (!h.Authorization)
+          return setFetchStatus("No hay sesión activa. Abrí Opciones para reautenticar.", true);
         await doEnqueueAnalyze(c, h);
       };
       enqueueAnalyzeBtn.addEventListener("click", onEnqueueAnalyze);
@@ -664,8 +722,10 @@ export function initFetchTab(deps) {
     if (modeSel) {
       const onModeChange = () => {
         const m = modeSel.value;
-        if (qs("#followings_fields")) qs("#followings_fields").style.display = m === "followings" ? "block" : "none";
-        if (qs("#analyze_fields")) qs("#analyze_fields").style.display = m === "analyze" ? "block" : "none";
+        if (qs("#followings_fields"))
+          qs("#followings_fields").style.display = m === "followings" ? "block" : "none";
+        if (qs("#analyze_fields"))
+          qs("#analyze_fields").style.display = m === "analyze" ? "block" : "none";
       };
       modeSel.addEventListener("change", onModeChange);
       cleanupFns.push(() => modeSel.removeEventListener("change", onModeChange));

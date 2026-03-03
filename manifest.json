@@ -17,20 +17,9 @@
     "48": "icons/logo.png",
     "128": "icons/logo.png"
   },
-  "permissions": [
-    "storage",
-    "alarms",
-    "tabs",
-    "cookies",
-    "notifications"
-  ],
-  "host_permissions": [
-    "https://www.instagram.com/*",
-    "https://instagram.com/*"
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
-  ],
+  "permissions": ["storage", "alarms", "tabs", "cookies", "notifications"],
+  "host_permissions": ["https://www.instagram.com/*", "https://instagram.com/*"],
+  "optional_host_permissions": ["https://*/*"],
   "background": {
     "service_worker": "src/entries/background-entry.js"
   },

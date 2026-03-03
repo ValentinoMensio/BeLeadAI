@@ -5,7 +5,9 @@
 import { normalizeJobStatus } from "../../../../shared/domain/job-contract.js";
 
 function formatFlowStopReason(stopReason) {
-  const code = String(stopReason || "").trim().toLowerCase();
+  const code = String(stopReason || "")
+    .trim()
+    .toLowerCase();
   if (!code) return "";
   const map = {
     target_reached: "objetivo alcanzado",
@@ -35,7 +37,8 @@ export function renderJobDetails(container, stats, jobKind = "") {
   const completed = ok + error;
   const hasAnalyze = stats.hasAnalyzeJob;
   const isFlow = (jobKind || "") === "followings_flow" || (stats.kind || "") === "followings_flow";
-  const isAnalyzeJob = (jobKind || "") === "analyze_profile" || (stats.kind || "") === "analyze_profile";
+  const isAnalyzeJob =
+    (jobKind || "") === "analyze_profile" || (stats.kind || "") === "analyze_profile";
   const normalizedStatus = normalizeJobStatus(stats.status);
   const isFailed = normalizedStatus === "failed";
   const isCanceled = normalizedStatus === "canceled";
@@ -74,7 +77,10 @@ export function renderJobDetails(container, stats, jobKind = "") {
     const matched = Number(stats.matchedTotal || 0);
     const target = Math.max(0, Number(stats.leadTarget || 0));
     const totalProfiles = target > 0 ? target : Math.max(total, matched, completed);
-    const doneProfiles = target > 0 ? Math.min(matched, totalProfiles) : Math.min(Math.max(matched, completed), totalProfiles);
+    const doneProfiles =
+      target > 0
+        ? Math.min(matched, totalProfiles)
+        : Math.min(Math.max(matched, completed), totalProfiles);
     const stopReasonLabel = formatFlowStopReason(stats.stopReason);
     if (isFailed) {
       statusText = stopReasonLabel
@@ -85,9 +91,17 @@ export function renderJobDetails(container, stats, jobKind = "") {
       statusText = `Detenido: ${doneProfiles}/${Math.max(totalProfiles, 1)} perfiles`;
     } else if (inProgress) {
       statusText = `Analizando perfiles: ${doneProfiles}/${Math.max(totalProfiles, 1)}`;
-    } else if (String(stats.stopReason || "").trim().toLowerCase() === "target_reached") {
+    } else if (
+      String(stats.stopReason || "")
+        .trim()
+        .toLowerCase() === "target_reached"
+    ) {
       statusText = `Objetivo alcanzado: ${doneProfiles}/${Math.max(totalProfiles, 1)} perfiles`;
-    } else if (String(stats.stopReason || "").trim().toLowerCase() === "scan_cap_reached") {
+    } else if (
+      String(stats.stopReason || "")
+        .trim()
+        .toLowerCase() === "scan_cap_reached"
+    ) {
       statusText = `Finalizado por limite de escaneo: ${doneProfiles}/${Math.max(totalProfiles, 1)} perfiles`;
     } else {
       statusText = `Analisis completado: ${doneProfiles}/${Math.max(totalProfiles, 1)} perfiles`;

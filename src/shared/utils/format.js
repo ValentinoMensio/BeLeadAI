@@ -64,12 +64,7 @@ export function formatJobOptionLabel(job, hasAnalyze = false, countOrNull = null
 // --- Límites ---
 
 export function isUnlimited(limit) {
-  return (
-    limit == null ||
-    limit === -1 ||
-    limit === "" ||
-    (typeof limit === "number" && limit < 0)
-  );
+  return limit == null || limit === -1 || limit === "" || (typeof limit === "number" && limit < 0);
 }
 
 export function formatLimitValue(used, limit) {

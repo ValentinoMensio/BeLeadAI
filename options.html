@@ -1,161 +1,235 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BeLeadAI - Configuración</title>
-  <link rel="stylesheet" href="src/styles/base.css">
-  <link rel="stylesheet" href="src/styles/components.css">
-  <link rel="stylesheet" href="src/styles/options.css">
-</head>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BeLeadAI - Configuración</title>
+    <link rel="stylesheet" href="src/styles/base.css" />
+    <link rel="stylesheet" href="src/styles/components.css" />
+    <link rel="stylesheet" href="src/styles/options.css" />
+  </head>
 
-<body class="options-root">
-  <div class="container">
-    <div class="panel">
-
-      <!-- ── Header ── -->
-      <div class="header">
-        <div class="brand">
-          <div class="brand-title">
-            <img class="brand-logo" src="icons/logo.svg" alt="" aria-hidden="true" />
-            <div class="title logo-text">BeLeadAI</div>
+  <body class="options-root">
+    <div class="container">
+      <div class="panel">
+        <!-- ── Header ── -->
+        <div class="header">
+          <div class="brand">
+            <div class="brand-title">
+              <img class="brand-logo" src="icons/logo.svg" alt="" aria-hidden="true" />
+              <div class="title logo-text">BeLeadAI</div>
+            </div>
+            <div class="subtitle">Panel de configuración · API key en sesión del navegador</div>
           </div>
-          <div class="subtitle">Panel de configuración · API key en sesión del navegador</div>
-        </div>
-        <div class="status-pill" id="cfgStatus">
-          <span class="dot" id="cfgDot"></span>
-          <span id="cfgText">Sin configurar</span>
-        </div>
-      </div>
-
-      <div id="update-required-screen" class="update-required-screen is-hidden">
-        <div class="update-required-card">
-          <h3>Actualizacion obligatoria</h3>
-          <p id="update-required-message">Necesitas instalar la version mas reciente para continuar.</p>
-          <p id="update-required-versions" class="update-required-versions"></p>
-          <a id="update-required-action" class="btn primary" href="#" target="_blank" rel="noopener noreferrer">Actualizar extension</a>
-        </div>
-      </div>
-
-      <div class="content">
-
-        <!-- ── 1. Conexión API ── -->
-        <div class="section">
-
-          <p class="section-title"><img class="section-icon-img" src="icons/plug.svg" alt="" aria-hidden="true" />Conexión API</p>
-
-          <label for="api_base">URL Base de la API</label>
-          <input id="api_base" placeholder="https://api.tu-dominio.com" />
-
-          <label for="api_token">API Key</label>
-          <input id="api_token" placeholder="tu_api_key" type="password" />
-
-          <div class="row row-top-md">
-            <input id="health_ping_result" readonly placeholder="Resultado del test…" />
-            <button id="test_health" class="btn secondary">Probar conexión</button>
-          </div>
-          <p class="hint hint-top-sm">Verifica token y cuenta con GET <code>/ext/v2/ping</code>.</p>
-        </div>
-
-        <!-- ── 2. Sesión ── -->
-        <div class="section">
-          <p class="section-title"><img class="section-icon-img" src="icons/padlock.svg" alt="" aria-hidden="true" />Sesión</p>
-
-          <div class="session-actions-row session-actions-top">
-            <button id="logout_device" class="btn secondary">Cerrar sesión aquí</button>
-            <button id="logout_all_devices" class="btn secondary">Cerrar en todos los dispositivos</button>
+          <div class="status-pill" id="cfgStatus">
+            <span class="dot" id="cfgDot"></span>
+            <span id="cfgText">Sin configurar</span>
           </div>
         </div>
 
-        <!-- ── 3. Cuotas ── -->
-        <div class="section" id="quotas_section">
-          <p class="section-title"><img class="section-icon-img" src="icons/bar_chart.svg" alt="" aria-hidden="true" />Cuotas del plan</p>
-          <p class="hint hint-no-top hint-bottom-md">Tu plan limita el total. La cuenta en pestaña se detecta por cookie (ds_user_id) en Instagram.</p>
-          <div id="quotas_loading" class="status-line">Probá la API para ver tus cuotas.</div>
-          <div id="quotas_content" class="is-hidden">
-            <div id="quotas_tab_account" class="quotas-tab-account">Cuenta en pestaña: —</div>
-            <div class="quotas-block">
-              <div class="quotas-block-title"><img class="quotas-title-icon-img" src="icons/message.svg" alt="" aria-hidden="true" />Mensajes (cliente)</div>
-              <div class="quotas-row">
-                <span class="quotas-label">Plan</span>
-                <div class="quotas-progress-wrap">
-                  <div class="progress"><div id="quotas_bar_month"></div></div>
+        <div id="update-required-screen" class="update-required-screen is-hidden">
+          <div class="update-required-card">
+            <h3>Actualizacion obligatoria</h3>
+            <p id="update-required-message">
+              Necesitas instalar la version mas reciente para continuar.
+            </p>
+            <p id="update-required-versions" class="update-required-versions"></p>
+            <a
+              id="update-required-action"
+              class="btn primary"
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Actualizar extension</a
+            >
+          </div>
+        </div>
+
+        <div class="content">
+          <!-- ── 1. Conexión API ── -->
+          <div class="section">
+            <p class="section-title">
+              <img
+                class="section-icon-img"
+                src="icons/plug.svg"
+                alt=""
+                aria-hidden="true"
+              />Conexión API
+            </p>
+
+            <label for="api_base">URL Base de la API</label>
+            <input id="api_base" placeholder="https://api.tu-dominio.com" />
+
+            <label for="api_token">API Key</label>
+            <input id="api_token" placeholder="tu_api_key" type="password" />
+
+            <div class="row row-top-md">
+              <input id="health_ping_result" readonly placeholder="Resultado del test…" />
+              <button id="test_health" class="btn secondary">Probar conexión</button>
+            </div>
+            <p class="hint hint-top-sm">
+              Verifica token y cuenta con GET <code>/ext/v2/ping</code>.
+            </p>
+          </div>
+
+          <!-- ── 2. Sesión ── -->
+          <div class="section">
+            <p class="section-title">
+              <img
+                class="section-icon-img"
+                src="icons/padlock.svg"
+                alt=""
+                aria-hidden="true"
+              />Sesión
+            </p>
+
+            <div class="session-actions-row session-actions-top">
+              <button id="logout_device" class="btn secondary">Cerrar sesión aquí</button>
+              <button id="logout_all_devices" class="btn secondary">
+                Cerrar en todos los dispositivos
+              </button>
+            </div>
+          </div>
+
+          <!-- ── 3. Cuotas ── -->
+          <div class="section" id="quotas_section">
+            <p class="section-title">
+              <img
+                class="section-icon-img"
+                src="icons/bar_chart.svg"
+                alt=""
+                aria-hidden="true"
+              />Cuotas del plan
+            </p>
+            <p class="hint hint-no-top hint-bottom-md">
+              Tu plan limita el total. La cuenta en pestaña se detecta por cookie (ds_user_id) en
+              Instagram.
+            </p>
+            <div id="quotas_loading" class="status-line">Probá la API para ver tus cuotas.</div>
+            <div id="quotas_content" class="is-hidden">
+              <div id="quotas_tab_account" class="quotas-tab-account">Cuenta en pestaña: —</div>
+              <div class="quotas-block">
+                <div class="quotas-block-title">
+                  <img
+                    class="quotas-title-icon-img"
+                    src="icons/message.svg"
+                    alt=""
+                    aria-hidden="true"
+                  />Mensajes (cliente)
                 </div>
-                <span id="quotas_value_month" class="quotas-value">— / —</span>
+                <div class="quotas-row">
+                  <span class="quotas-label">Plan</span>
+                  <div class="quotas-progress-wrap">
+                    <div class="progress"><div id="quotas_bar_month"></div></div>
+                  </div>
+                  <span id="quotas_value_month" class="quotas-value">— / —</span>
+                </div>
+                <div id="quotas_reset_month" class="progress-text progress-tight-top"></div>
               </div>
-              <div id="quotas_reset_month" class="progress-text progress-tight-top"></div>
+              <div class="quotas-block">
+                <div class="quotas-block-title">
+                  <img
+                    class="quotas-title-icon-img"
+                    src="icons/users.svg"
+                    alt=""
+                    aria-hidden="true"
+                  />Cuentas enlazadas <span class="quotas-block-sub">(ventana 24h por cuenta)</span>
+                </div>
+                <div id="quotas_accounts_list" class="quotas-accounts-list"></div>
+              </div>
             </div>
-            <div class="quotas-block">
-              <div class="quotas-block-title"><img class="quotas-title-icon-img" src="icons/users.svg" alt="" aria-hidden="true" />Cuentas enlazadas <span class="quotas-block-sub">(ventana 24h por cuenta)</span></div>
-              <div id="quotas_accounts_list" class="quotas-accounts-list"></div>
+          </div>
+
+          <!-- ── 4. Preferencias ── -->
+          <div class="section">
+            <p class="section-title">
+              <img
+                class="section-icon-img"
+                src="icons/gear.svg"
+                alt=""
+                aria-hidden="true"
+              />Preferencias
+            </p>
+            <label for="default_limit">Leads por defecto (objetivo final)</label>
+            <input id="default_limit" type="number" min="1" step="1" value="50" />
+          </div>
+
+          <!-- ── 5. IA / Prompt ── -->
+          <div class="section section-chatgpt">
+            <p class="section-title">
+              <img class="section-icon-img" src="icons/robot.svg" alt="" aria-hidden="true" />IA ·
+              Generación de mensajes
+            </p>
+
+            <label for="chatgpt_prompt">Prompt</label>
+            <textarea
+              id="chatgpt_prompt"
+              rows="8"
+              class="chatgpt-prompt-ta"
+              placeholder="Instrucciones para que la IA genere mensajes personalizados. Ej: Eres un experto en marketing digital. Escribe un mensaje breve y cálido para contactar a {username}, presentado como {rubro}. Ofrece colaboración o ideas para mejorar su presencia en Instagram. No seas técnico."
+            ></textarea>
+
+            <p class="hint hint-top-xs" id="chatgpt_prompt_hint">Caracteres: 0/700</p>
+
+            <div class="variables-block" id="chatgpt_variables_hint">
+              <p class="variables-label">Variables disponibles — clic para insertar</p>
+              <div class="variables-chips">
+                <code class="var-insert" data-var="{username}">{username}</code>
+                <code class="var-insert" data-var="{rubro}">{rubro}</code>
+                <code class="var-insert" data-var="{followers}">{followers}</code>
+                <code class="var-insert" data-var="{followers_count}">{followers_count}</code>
+                <code class="var-insert" data-var="{following}">{following}</code>
+                <code class="var-insert" data-var="{followings}">{followings}</code>
+                <code class="var-insert" data-var="{posts}">{posts}</code>
+                <code class="var-insert" data-var="{posts_count}">{posts_count}</code>
+                <code class="var-insert" data-var="{bio}">{bio}</code>
+                <code class="var-insert" data-var="{engagement_score}">{engagement_score}</code>
+                <code class="var-insert" data-var="{success_score}">{success_score}</code>
+                <code class="var-insert" data-var="{avg_views}">{avg_views}</code>
+                <code class="var-insert" data-var="{verified}">{verified}</code>
+                <code class="var-insert" data-var="{private}">{private}</code>
+                <code class="var-insert" data-var="{is_verified}">{is_verified}</code>
+                <code class="var-insert" data-var="{is_private}">{is_private}</code>
+              </div>
             </div>
+          </div>
+
+          <!-- ── 6. Test de conexión ── -->
+          <div class="section">
+            <p class="section-title">
+              <img
+                class="section-icon-img"
+                src="icons/magnifying.svg"
+                alt=""
+                aria-hidden="true"
+              />Prueba de conexión
+            </p>
+            <p class="hint hint-no-top hint-bottom-md">
+              Verifica tu API con GET <code>/health</code>.
+            </p>
+            <div class="row">
+              <input id="health_result" readonly placeholder="Resultado…" />
+              <button id="test" class="btn secondary">Probar</button>
+            </div>
+          </div>
+
+          <!-- ── Guardar ── -->
+          <div class="save-wrap">
+            <button id="save" class="btn primary save-btn">
+              <img class="save-icon-img" src="icons/savew.svg" alt="" aria-hidden="true" />Guardar
+              configuración
+            </button>
+            <div class="status-line" id="save_status">—</div>
           </div>
         </div>
 
-        <!-- ── 4. Preferencias ── -->
-        <div class="section">
-          <p class="section-title"><img class="section-icon-img" src="icons/gear.svg" alt="" aria-hidden="true" />Preferencias</p>
-          <label for="default_limit">Leads por defecto (objetivo final)</label>
-          <input id="default_limit" type="number" min="1" step="1" value="50" />
+        <div class="footer-note">
+          Al guardar se solicita permiso sólo para el dominio HTTPS configurado de tu API.
         </div>
-
-        <!-- ── 5. IA / Prompt ── -->
-        <div class="section section-chatgpt">
-          <p class="section-title"><img class="section-icon-img" src="icons/robot.svg" alt="" aria-hidden="true" />IA · Generación de mensajes</p>
-
-          <label for="chatgpt_prompt">Prompt</label>
-          <textarea id="chatgpt_prompt" rows="8" class="chatgpt-prompt-ta" placeholder="Instrucciones para que la IA genere mensajes personalizados. Ej: Eres un experto en marketing digital. Escribe un mensaje breve y cálido para contactar a {username}, presentado como {rubro}. Ofrece colaboración o ideas para mejorar su presencia en Instagram. No seas técnico."></textarea>
-
-          <p class="hint hint-top-xs" id="chatgpt_prompt_hint">Caracteres: 0/700</p>
-
-          <div class="variables-block" id="chatgpt_variables_hint">
-            <p class="variables-label">Variables disponibles — clic para insertar</p>
-            <div class="variables-chips">
-              <code class="var-insert" data-var="{username}">{username}</code>
-              <code class="var-insert" data-var="{rubro}">{rubro}</code>
-              <code class="var-insert" data-var="{followers}">{followers}</code>
-              <code class="var-insert" data-var="{followers_count}">{followers_count}</code>
-              <code class="var-insert" data-var="{following}">{following}</code>
-              <code class="var-insert" data-var="{followings}">{followings}</code>
-              <code class="var-insert" data-var="{posts}">{posts}</code>
-              <code class="var-insert" data-var="{posts_count}">{posts_count}</code>
-              <code class="var-insert" data-var="{bio}">{bio}</code>
-              <code class="var-insert" data-var="{engagement_score}">{engagement_score}</code>
-              <code class="var-insert" data-var="{success_score}">{success_score}</code>
-              <code class="var-insert" data-var="{avg_views}">{avg_views}</code>
-              <code class="var-insert" data-var="{verified}">{verified}</code>
-              <code class="var-insert" data-var="{private}">{private}</code>
-              <code class="var-insert" data-var="{is_verified}">{is_verified}</code>
-              <code class="var-insert" data-var="{is_private}">{is_private}</code>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── 6. Test de conexión ── -->
-        <div class="section">
-          <p class="section-title"><img class="section-icon-img" src="icons/magnifying.svg" alt="" aria-hidden="true" />Prueba de conexión</p>
-          <p class="hint hint-no-top hint-bottom-md">Verifica tu API con GET <code>/health</code>.</p>
-          <div class="row">
-            <input id="health_result" readonly placeholder="Resultado…" />
-            <button id="test" class="btn secondary">Probar</button>
-          </div>
-        </div>
-
-        <!-- ── Guardar ── -->
-        <div class="save-wrap">
-          <button id="save" class="btn primary save-btn"><img class="save-icon-img" src="icons/savew.svg" alt="" aria-hidden="true" />Guardar configuración</button>
-          <div class="status-line" id="save_status">—</div>
-        </div>
-
-      </div>
-
-      <div class="footer-note">
-        Al guardar se solicita permiso sólo para el dominio HTTPS configurado de tu API.
       </div>
     </div>
-  </div>
 
-  <script type="module" src="src/shared/errors/api-errors.js"></script>
-  <script type="module" src="src/entries/options-entry.js"></script>
-</body>
+    <script type="module" src="src/shared/errors/api-errors.js"></script>
+    <script type="module" src="src/entries/options-entry.js"></script>
+  </body>
 </html>

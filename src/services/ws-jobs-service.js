@@ -16,7 +16,9 @@ export function ensureJobsWsConnected() {
  */
 export function subscribeJobsUpdated(onJobsUpdated) {
   const listener = (msg) => {
-    const type = String(msg?.type || "").trim().toLowerCase();
+    const type = String(msg?.type || "")
+      .trim()
+      .toLowerCase();
     if (type === "jobs_updated" || type === "jobs.updated" || type === "job.updated") {
       onJobsUpdated(msg?.payload ?? msg);
     }

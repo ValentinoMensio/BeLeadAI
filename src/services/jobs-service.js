@@ -5,7 +5,12 @@
 import { getAuthHeaders } from "./api-client.js";
 import { apiFetch } from "./api-client.js";
 import { API_PATHS } from "../config/endpoints.js";
-import { isTerminalJobStatus, normalizeEntityType, normalizeJobStatus, parseScopedEntityId } from "../shared/domain/job-contract.js";
+import {
+  isTerminalJobStatus,
+  normalizeEntityType,
+  normalizeJobStatus,
+  parseScopedEntityId,
+} from "../shared/domain/job-contract.js";
 
 function unwrapApiData(payload) {
   if (!payload || typeof payload !== "object") return {};
@@ -14,9 +19,16 @@ function unwrapApiData(payload) {
   return payload;
 }
 
-function buildServiceError(result, fallbackCode = "API_ERROR", fallbackMessage = "Error de la API.") {
+function buildServiceError(
+  result,
+  fallbackCode = "API_ERROR",
+  fallbackMessage = "Error de la API."
+) {
   const status = Number(result?.status || 0) || 0;
-  const code = String(result?.error?.code || fallbackCode).trim().toUpperCase() || fallbackCode;
+  const code =
+    String(result?.error?.code || fallbackCode)
+      .trim()
+      .toUpperCase() || fallbackCode;
   const message = String(result?.error?.message || fallbackMessage).trim() || fallbackMessage;
   return {
     code,
@@ -86,7 +98,9 @@ function buildJobsIndex(allJobs) {
 }
 
 function getJobRowById(jobId, jobsIndex) {
-  const raw = String(jobId || "").trim().toLowerCase();
+  const raw = String(jobId || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return null;
   if (jobsIndex?.byExact?.has(raw)) return jobsIndex.byExact.get(raw) || null;
   const normalized = normalizeEntityId(raw);
@@ -97,7 +111,9 @@ function getJobRowById(jobId, jobsIndex) {
 }
 
 function getLineageKey(source, jobsIndex = null) {
-  const kind = String(source?.kind || "").trim().toLowerCase();
+  const kind = String(source?.kind || "")
+    .trim()
+    .toLowerCase();
   if (kind === "followings_flow") {
     return `flow:${normalizeEntityId(source?.id || "")}`;
   }
@@ -111,7 +127,9 @@ function getLineageKey(source, jobsIndex = null) {
 }
 
 function sourcePriority(kind) {
-  const k = String(kind || "").trim().toLowerCase();
+  const k = String(kind || "")
+    .trim()
+    .toLowerCase();
   if (k === "followings_flow") return 3;
   if (k === "analyze_profile") return 2;
   if (k === "fetch_followings") return 1;
@@ -172,26 +190,34 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   const resultsResp = await apiFetch(baseUrl, resultsPath);
   if (resultsResp.ok) {
     const resultsData = unwrapApiData(resultsResp.data);
-    const rows = (Array.isArray(resultsData?.items) ? resultsData.items : [])
-      .filter((r) => {
-        const kind = String(r?.result_kind || "").toLowerCase();
-        return kind === "analyze_profile" || kind === "followings_flow";
-      });
-    const extractJobs = rows.map((r) => ({
-      id: toCanonicalResultId(r?.result_id || "", normalizeEntityType(r?.result_kind || "result")),
-      entity_type: normalizeEntityType(r?.result_kind || "result"),
-      kind: String(r?.result_kind || ""),
-      status: normalizeJobStatus(r?.status || "completed"),
-      created_at: String(r?.created_at || ""),
-      target_username: String(r?.meta?.target_username || ""),
-      lead_target: Number(r?.meta?.lead_target || 0) || 0,
-      scan_cap: Number(r?.meta?.scan_cap || 0) || 0,
-      scanned_total: Number(r?.meta?.scanned_total || 0) || 0,
-      matched_total: Number(r?.meta?.matched_total || 0) || 0,
-      rounds_done: Number(r?.meta?.rounds_done || 0) || 0,
-      stop_reason: r?.meta?.stop_reason || null,
-    })).filter((r) => !!r.id);
-    const saved = await new Promise((r) => chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (d) => r(d.last_flow_id || d.last_job_id)));
+    const rows = (Array.isArray(resultsData?.items) ? resultsData.items : []).filter((r) => {
+      const kind = String(r?.result_kind || "").toLowerCase();
+      return kind === "analyze_profile" || kind === "followings_flow";
+    });
+    const extractJobs = rows
+      .map((r) => ({
+        id: toCanonicalResultId(
+          r?.result_id || "",
+          normalizeEntityType(r?.result_kind || "result")
+        ),
+        entity_type: normalizeEntityType(r?.result_kind || "result"),
+        kind: String(r?.result_kind || ""),
+        status: normalizeJobStatus(r?.status || "completed"),
+        created_at: String(r?.created_at || ""),
+        target_username: String(r?.meta?.target_username || ""),
+        lead_target: Number(r?.meta?.lead_target || 0) || 0,
+        scan_cap: Number(r?.meta?.scan_cap || 0) || 0,
+        scanned_total: Number(r?.meta?.scanned_total || 0) || 0,
+        matched_total: Number(r?.meta?.matched_total || 0) || 0,
+        rounds_done: Number(r?.meta?.rounds_done || 0) || 0,
+        stop_reason: r?.meta?.stop_reason || null,
+      }))
+      .filter((r) => !!r.id);
+    const saved = await new Promise((r) =>
+      chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (d) =>
+        r(d.last_flow_id || d.last_job_id)
+      )
+    );
     const savedId = toCanonicalResultId(saved, "result");
     return { ok: true, data: { extractJobs, savedJobId: savedId } };
   }
@@ -200,7 +226,7 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   const listLimit = Math.max(limit * 2, 20);
   const jobsResult = await apiFetch(baseUrl, `${API_PATHS.jobs}?limit=${listLimit}`);
   const jobsData = jobsResult.ok ? unwrapApiData(jobsResult.data) : {};
-  const allJobs = jobsResult.ok ? (jobsData?.jobs || []) : [];
+  const allJobs = jobsResult.ok ? jobsData?.jobs || [] : [];
 
   const jobsIndex = buildJobsIndex(allJobs);
 
@@ -238,9 +264,16 @@ export async function loadLastJobs(baseUrl, limit = 5) {
         created_at: j.created_at,
       }));
 
-    const extractJobs = mergeRecipientSources([...flowJobs, ...standaloneAnalyzeJobs], jobsIndex).slice(0, limit);
+    const extractJobs = mergeRecipientSources(
+      [...flowJobs, ...standaloneAnalyzeJobs],
+      jobsIndex
+    ).slice(0, limit);
 
-    const saved = await new Promise((r) => chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (d) => r(d.last_flow_id || d.last_job_id)));
+    const saved = await new Promise((r) =>
+      chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (d) =>
+        r(d.last_flow_id || d.last_job_id)
+      )
+    );
     const savedId = toCanonicalResultId(saved, "result");
     return { ok: true, data: { extractJobs, savedJobId: savedId } };
   }
@@ -264,11 +297,22 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   for (const j of fetchJobs) {
     const fetchId = parseScopedEntityId(j.id, "job").id;
     const hasAnalyze = analyzeJobs.some((a) => parseScopedEntityId(a.id, "job").id === fetchId);
-    extractJobs.push({ ...j, id: fetchId, entity_type: "job", status: normalizeJobStatus(j.status), _hasAnalyze: hasAnalyze });
+    extractJobs.push({
+      ...j,
+      id: fetchId,
+      entity_type: "job",
+      status: normalizeJobStatus(j.status),
+      _hasAnalyze: hasAnalyze,
+    });
   }
   for (const a of analyzeJobs) {
     const baseId = parseScopedEntityId(a.id, "job").id;
-    const normalizedAnalyze = { ...a, id: baseId, entity_type: "job", status: normalizeJobStatus(a.status) };
+    const normalizedAnalyze = {
+      ...a,
+      id: baseId,
+      entity_type: "job",
+      status: normalizeJobStatus(a.status),
+    };
     if (!baseId) {
       extractJobs.push(normalizedAnalyze);
       continue;
@@ -278,7 +322,9 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   }
   const dedupedExtractJobs = mergeRecipientSources(extractJobs, jobsIndex);
 
-  const saved = await new Promise((r) => chrome.storage.local.get({ last_job_id: null }, (d) => r(d.last_job_id)));
+  const saved = await new Promise((r) =>
+    chrome.storage.local.get({ last_job_id: null }, (d) => r(d.last_job_id))
+  );
   const savedId = toCanonicalResultId(saved, "result");
   return { ok: true, data: { extractJobs: dedupedExtractJobs, savedJobId: savedId } };
 }
@@ -313,7 +359,11 @@ export async function loadJobSummary(baseUrl, jobOrFlowId) {
   if (!result.ok) {
     return {
       ok: false,
-      error: buildServiceError(result, "RESULT_SUMMARY_FAILED", "No se pudo cargar el resumen del resultado."),
+      error: buildServiceError(
+        result,
+        "RESULT_SUMMARY_FAILED",
+        "No se pudo cargar el resumen del resultado."
+      ),
     };
   }
   const summary = unwrapApiData(result.data);
@@ -331,9 +381,14 @@ export async function loadJobSummary(baseUrl, jobOrFlowId) {
     ok: true,
     data: {
       ...summary,
-      id: toCanonicalResultId(summary.id || resultId, normalizeEntityType(summary.kind || "result")),
+      id: toCanonicalResultId(
+        summary.id || resultId,
+        normalizeEntityType(summary.kind || "result")
+      ),
       status: normalizeJobStatus(summary.status),
-      kind: String(summary.kind || "").trim().toLowerCase(),
+      kind: String(summary.kind || "")
+        .trim()
+        .toLowerCase(),
     },
   };
 }
@@ -440,7 +495,10 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
           jobsWithPending: [],
           hasActiveWork: true,
           activeWork: {
-            id: toCanonicalResultId(data?.active_work?.id || "", normalizeEntityType(data?.active_work?.kind || "job")),
+            id: toCanonicalResultId(
+              data?.active_work?.id || "",
+              normalizeEntityType(data?.active_work?.kind || "job")
+            ),
             kind: String(data?.active_work?.kind || "followings_flow"),
             status: normalizeJobStatus(data?.active_work?.status || "running"),
           },
@@ -449,16 +507,26 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
     }
 
     const items = Array.isArray(data?.items) ? data.items : [];
-    const jobsWithPending = items.map((item) => ({
-      id: toCanonicalSourceId(item?.source_id || "", normalizeEntityType(item?.source_kind || "job")),
-      entity_type: normalizeEntityType(item?.source_kind || "job"),
-      kind: String(item?.source_kind || ""),
-      created_at: String(item?.created_at || ""),
-      label: String(item?.label || "Origen"),
-      pending: Number(item?.pending_count || 0) || 0,
-      total: Number(item?.total_count || 0) || 0,
-      status: normalizeJobStatus(item?.status || "completed"),
-    })).filter((j) => !!j.id && j.pending > 0 && ["followings_flow", "analyze_profile"].includes(String(j.kind || "").toLowerCase()));
+    const jobsWithPending = items
+      .map((item) => ({
+        id: toCanonicalSourceId(
+          item?.source_id || "",
+          normalizeEntityType(item?.source_kind || "job")
+        ),
+        entity_type: normalizeEntityType(item?.source_kind || "job"),
+        kind: String(item?.source_kind || ""),
+        created_at: String(item?.created_at || ""),
+        label: String(item?.label || "Origen"),
+        pending: Number(item?.pending_count || 0) || 0,
+        total: Number(item?.total_count || 0) || 0,
+        status: normalizeJobStatus(item?.status || "completed"),
+      }))
+      .filter(
+        (j) =>
+          !!j.id &&
+          j.pending > 0 &&
+          ["followings_flow", "analyze_profile"].includes(String(j.kind || "").toLowerCase())
+      );
 
     return {
       ok: true,

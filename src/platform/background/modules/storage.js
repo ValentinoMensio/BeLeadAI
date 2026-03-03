@@ -7,20 +7,20 @@
   }) {
     const textEncoder = new TextEncoder();
     const AUTH_KEYS = {
-      deviceId: 'auth.device_id',
-      accessToken: 'auth.access_token',
-      accessExpiresAt: 'auth.access_expires_at',
-      refreshToken: 'auth.refresh_token',
-      refreshExpiresAt: 'auth.refresh_expires_at',
-      clientId: 'auth.client_id',
-      sessionId: 'auth.session_id',
-      cryptoSalt: 'auth.crypto_salt',
+      deviceId: "auth.device_id",
+      accessToken: "auth.access_token",
+      accessExpiresAt: "auth.access_expires_at",
+      refreshToken: "auth.refresh_token",
+      refreshExpiresAt: "auth.refresh_expires_at",
+      clientId: "auth.client_id",
+      sessionId: "auth.session_id",
+      cryptoSalt: "auth.crypto_salt",
     };
     const AUTH_SESSION_KEYS = {
-      accessToken: 'auth.session_access_token',
-      accessExpiresAt: 'auth.session_access_expires_at',
+      accessToken: "auth.session_access_token",
+      accessExpiresAt: "auth.session_access_expires_at",
     };
-    const AUTH_TOKEN_PREFIX = 'enc:v1:';
+    const AUTH_TOKEN_PREFIX = "enc:v1:";
 
     function getSession(defaults) {
       return new Promise((resolve) => {
@@ -71,7 +71,7 @@
 
     function bytesToBase64(bytes) {
       const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
-      let bin = '';
+      let bin = "";
       for (let i = 0; i < view.length; i += 1) {
         bin += String.fromCharCode(view[i]);
       }
@@ -79,7 +79,7 @@
     }
 
     function base64ToBytes(b64) {
-      const bin = atob(String(b64 || ''));
+      const bin = atob(String(b64 || ""));
       const out = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i += 1) {
         out[i] = bin.charCodeAt(i);
@@ -95,8 +95,8 @@
     }
 
     async function getOrCreateAuthSalt() {
-      const data = await storageGetLocal({ [AUTH_KEYS.cryptoSalt]: '' });
-      const existing = String(data[AUTH_KEYS.cryptoSalt] || '').trim();
+      const data = await storageGetLocal({ [AUTH_KEYS.cryptoSalt]: "" });
+      const existing = String(data[AUTH_KEYS.cryptoSalt] || "").trim();
       if (existing) return existing;
       const salt = bytesToBase64(randomBytes(16));
       await saveState({ [AUTH_KEYS.cryptoSalt]: salt });
@@ -104,41 +104,41 @@
     }
 
     async function deriveAuthKey(deviceId) {
-      const did = String(deviceId || '').trim();
+      const did = String(deviceId || "").trim();
       if (!did) return null;
       const saltB64 = await getOrCreateAuthSalt();
       const keyMaterial = await crypto.subtle.importKey(
-        'raw',
+        "raw",
         textEncoder.encode(did),
-        'PBKDF2',
+        "PBKDF2",
         false,
-        ['deriveKey']
+        ["deriveKey"]
       );
       return crypto.subtle.deriveKey(
         {
-          name: 'PBKDF2',
+          name: "PBKDF2",
           salt: base64ToBytes(saltB64),
           iterations: 120000,
-          hash: 'SHA-256',
+          hash: "SHA-256",
         },
         keyMaterial,
         {
-          name: 'AES-GCM',
+          name: "AES-GCM",
           length: 256,
         },
         false,
-        ['encrypt', 'decrypt']
+        ["encrypt", "decrypt"]
       );
     }
 
     async function encryptTokenValue(rawValue, deviceId) {
-      const value = String(rawValue || '').trim();
-      if (!value) return '';
+      const value = String(rawValue || "").trim();
+      if (!value) return "";
       const key = await deriveAuthKey(deviceId);
       if (!key) return value;
       const iv = randomBytes(12);
       const cipherBuffer = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
+        { name: "AES-GCM", iv },
         key,
         textEncoder.encode(value)
       );
@@ -146,35 +146,31 @@
     }
 
     async function decryptTokenValue(storedValue, deviceId) {
-      const value = String(storedValue || '').trim();
-      if (!value) return '';
+      const value = String(storedValue || "").trim();
+      if (!value) return "";
       if (!value.startsWith(AUTH_TOKEN_PREFIX)) return value;
       const key = await deriveAuthKey(deviceId);
-      if (!key) return '';
+      if (!key) return "";
       const payload = value.slice(AUTH_TOKEN_PREFIX.length);
-      const parts = payload.split('.');
-      if (parts.length !== 2) return '';
+      const parts = payload.split(".");
+      if (parts.length !== 2) return "";
       try {
         const iv = base64ToBytes(parts[0]);
         const cipherBytes = base64ToBytes(parts[1]);
-        const plainBuffer = await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv },
-          key,
-          cipherBytes
-        );
+        const plainBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipherBytes);
         return new TextDecoder().decode(plainBuffer);
       } catch {
-        return '';
+        return "";
       }
     }
 
     async function resolveAuthDeviceIdForWrite(patch) {
-      const fromPatch = Object.prototype.hasOwnProperty.call(patch || {}, 'device_id')
-        ? String(patch.device_id || '').trim()
-        : '';
+      const fromPatch = Object.prototype.hasOwnProperty.call(patch || {}, "device_id")
+        ? String(patch.device_id || "").trim()
+        : "";
       if (fromPatch) return fromPatch;
-      const current = await storageGetLocal({ [AUTH_KEYS.deviceId]: '' });
-      return String(current[AUTH_KEYS.deviceId] || '').trim();
+      const current = await storageGetLocal({ [AUTH_KEYS.deviceId]: "" });
+      return String(current[AUTH_KEYS.deviceId] || "").trim();
     }
 
     async function getProcessedTaskResults() {
@@ -194,7 +190,7 @@
     }
 
     async function getProcessedTaskResult(taskId) {
-      const id = String(taskId || '').trim();
+      const id = String(taskId || "").trim();
       if (!id) return null;
       const results = await getProcessedTaskResults();
       const pruned = pruneProcessedTaskResults(results);
@@ -205,7 +201,7 @@
     }
 
     async function rememberProcessedTaskResult(taskId, reportPayload) {
-      const id = String(taskId || '').trim();
+      const id = String(taskId || "").trim();
       if (!id) return;
       const results = await getProcessedTaskResults();
       const next = pruneProcessedTaskResults({
@@ -220,12 +216,14 @@
 
     async function getPendingReports() {
       const data = await storageGetLocal({ dm_sender_pending_reports: [] });
-      const rows = Array.isArray(data.dm_sender_pending_reports) ? data.dm_sender_pending_reports : [];
+      const rows = Array.isArray(data.dm_sender_pending_reports)
+        ? data.dm_sender_pending_reports
+        : [];
       return rows.slice(0, pendingReportsMax);
     }
 
     function reportKey(r) {
-      return `${String(r?.job_id || '')}:${String(r?.task_id || '')}`;
+      return `${String(r?.job_id || "")}:${String(r?.task_id || "")}`;
     }
 
     async function enqueuePendingReport(report) {
@@ -239,25 +237,25 @@
 
     async function getAuthState() {
       const defaults = {
-        [AUTH_KEYS.deviceId]: '',
-        [AUTH_KEYS.accessToken]: '',
+        [AUTH_KEYS.deviceId]: "",
+        [AUTH_KEYS.accessToken]: "",
         [AUTH_KEYS.accessExpiresAt]: 0,
-        [AUTH_KEYS.refreshToken]: '',
+        [AUTH_KEYS.refreshToken]: "",
         [AUTH_KEYS.refreshExpiresAt]: 0,
-        [AUTH_KEYS.clientId]: '',
-        [AUTH_KEYS.sessionId]: '',
-        [AUTH_KEYS.cryptoSalt]: '',
+        [AUTH_KEYS.clientId]: "",
+        [AUTH_KEYS.sessionId]: "",
+        [AUTH_KEYS.cryptoSalt]: "",
       };
       const sessionDefaults = {
-        [AUTH_SESSION_KEYS.accessToken]: '',
+        [AUTH_SESSION_KEYS.accessToken]: "",
         [AUTH_SESSION_KEYS.accessExpiresAt]: 0,
       };
       const data = await storageGetLocal(defaults);
       const sessionData = await getSession(sessionDefaults);
-      const deviceId = String(data[AUTH_KEYS.deviceId] || '').trim();
-      const rawAccessStored = String(data[AUTH_KEYS.accessToken] || '').trim();
-      const rawRefreshStored = String(data[AUTH_KEYS.refreshToken] || '').trim();
-      let accessToken = String(sessionData[AUTH_SESSION_KEYS.accessToken] || '').trim();
+      const deviceId = String(data[AUTH_KEYS.deviceId] || "").trim();
+      const rawAccessStored = String(data[AUTH_KEYS.accessToken] || "").trim();
+      const rawRefreshStored = String(data[AUTH_KEYS.refreshToken] || "").trim();
+      let accessToken = String(sessionData[AUTH_SESSION_KEYS.accessToken] || "").trim();
       let accessExpiresAt = Number(sessionData[AUTH_SESSION_KEYS.accessExpiresAt] || 0) || 0;
       if (!accessToken) {
         accessToken = await decryptTokenValue(data[AUTH_KEYS.accessToken], deviceId);
@@ -268,7 +266,7 @@
             [AUTH_SESSION_KEYS.accessExpiresAt]: accessExpiresAt,
           });
           await saveState({
-            [AUTH_KEYS.accessToken]: '',
+            [AUTH_KEYS.accessToken]: "",
             [AUTH_KEYS.accessExpiresAt]: 0,
           });
         }
@@ -277,7 +275,10 @@
       if (deviceId) {
         const migratePatch = {};
         if (rawRefreshStored && !rawRefreshStored.startsWith(AUTH_TOKEN_PREFIX)) {
-          migratePatch[AUTH_KEYS.refreshToken] = await encryptTokenValue(rawRefreshStored, deviceId);
+          migratePatch[AUTH_KEYS.refreshToken] = await encryptTokenValue(
+            rawRefreshStored,
+            deviceId
+          );
         }
         if (Object.keys(migratePatch).length) {
           await saveState(migratePatch);
@@ -289,8 +290,8 @@
         access_expires_at: accessExpiresAt,
         refresh_token: refreshToken,
         refresh_expires_at: Number(data[AUTH_KEYS.refreshExpiresAt] || 0) || 0,
-        client_id: String(data[AUTH_KEYS.clientId] || '').trim(),
-        session_id: String(data[AUTH_KEYS.sessionId] || '').trim(),
+        client_id: String(data[AUTH_KEYS.clientId] || "").trim(),
+        session_id: String(data[AUTH_KEYS.sessionId] || "").trim(),
       };
     }
 
@@ -298,21 +299,25 @@
       const deviceId = await resolveAuthDeviceIdForWrite(patch);
       const next = {};
       const sessionNext = {};
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'device_id')) next[AUTH_KEYS.deviceId] = String(patch.device_id || '').trim();
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'access_token')) {
-        sessionNext[AUTH_SESSION_KEYS.accessToken] = String(patch.access_token || '').trim();
-        next[AUTH_KEYS.accessToken] = '';
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "device_id"))
+        next[AUTH_KEYS.deviceId] = String(patch.device_id || "").trim();
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "access_token")) {
+        sessionNext[AUTH_SESSION_KEYS.accessToken] = String(patch.access_token || "").trim();
+        next[AUTH_KEYS.accessToken] = "";
         next[AUTH_KEYS.accessExpiresAt] = 0;
       }
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'access_expires_at')) {
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "access_expires_at")) {
         sessionNext[AUTH_SESSION_KEYS.accessExpiresAt] = Number(patch.access_expires_at || 0) || 0;
       }
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'refresh_token')) {
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "refresh_token")) {
         next[AUTH_KEYS.refreshToken] = await encryptTokenValue(patch.refresh_token, deviceId);
       }
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'refresh_expires_at')) next[AUTH_KEYS.refreshExpiresAt] = Number(patch.refresh_expires_at || 0) || 0;
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'client_id')) next[AUTH_KEYS.clientId] = String(patch.client_id || '').trim();
-      if (Object.prototype.hasOwnProperty.call(patch || {}, 'session_id')) next[AUTH_KEYS.sessionId] = String(patch.session_id || '').trim();
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "refresh_expires_at"))
+        next[AUTH_KEYS.refreshExpiresAt] = Number(patch.refresh_expires_at || 0) || 0;
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "client_id"))
+        next[AUTH_KEYS.clientId] = String(patch.client_id || "").trim();
+      if (Object.prototype.hasOwnProperty.call(patch || {}, "session_id"))
+        next[AUTH_KEYS.sessionId] = String(patch.session_id || "").trim();
       if (Object.keys(next).length) {
         await saveState(next);
       }

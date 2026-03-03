@@ -10,22 +10,22 @@ const ERROR_PERSIST_MS = 3000; // Los errores persisten por 3 segundos
 export function setSendStatus(msg, isErr = false) {
   const el = qs("#send_status");
   if (!el) return;
-  
+
   // Si hay un error visible y el nuevo mensaje no es error, no sobrescribir
   const isCurrentError = el.classList.contains("err");
   const now = Date.now();
-  
+
   if (isCurrentError && !isErr) {
     // Solo sobrescribir errores si han pasado más de ERROR_PERSIST_MS
     if (now - lastErrorTimestamp < ERROR_PERSIST_MS) {
       return; // Preservar el error
     }
   }
-  
+
   if (isErr) {
     lastErrorTimestamp = now;
   }
-  
+
   const nextText = String(msg || "");
   const nextClass = isErr ? "status-line err" : "status-line ok";
   if (el.textContent === nextText && el.className === nextClass) {

@@ -47,7 +47,10 @@ export function initLimits(deps) {
       dryRunEl.addEventListener("change", onDryRunChange);
     }
 
-    limitsRefreshIntervalId = setInterval(() => refreshLimitsWithCache(false), LIMITS_REFRESH_INTERVAL_MS);
+    limitsRefreshIntervalId = setInterval(
+      () => refreshLimitsWithCache(false),
+      LIMITS_REFRESH_INTERVAL_MS
+    );
 
     function cleanup() {
       if (rowDay) rowDay.removeEventListener("click", onDayClick);

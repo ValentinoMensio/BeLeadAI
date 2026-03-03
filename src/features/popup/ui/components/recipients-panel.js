@@ -10,10 +10,18 @@
  * @param {() => void} onSelectionChange - llamado tras cambiar selección
  * @param {string} kindLabel - "perfiles" | "followings"
  */
-export function renderRecipients(container, usernames, selectedSet, onSelectionChange, kindLabel = "followings") {
+export function renderRecipients(
+  container,
+  usernames,
+  selectedSet,
+  onSelectionChange,
+  kindLabel = "followings"
+) {
   const { listEl, toggleEl, actionsEl, summaryEl } = container;
   if (!listEl || !toggleEl) return;
-  const list = Array.isArray(usernames) ? usernames.map((u) => String(u || "").trim()).filter(Boolean) : [];
+  const list = Array.isArray(usernames)
+    ? usernames.map((u) => String(u || "").trim()).filter(Boolean)
+    : [];
   selectedSet.clear();
   list.forEach((u) => selectedSet.add(u));
   listEl.innerHTML = "";
@@ -47,7 +55,12 @@ export function renderRecipients(container, usernames, selectedSet, onSelectionC
 /**
  * Actualiza solo el texto del resumen.
  */
-export function updateRecipientsSummaryLabel(summaryEl, total, selectedCount, kindLabel = "followings") {
+export function updateRecipientsSummaryLabel(
+  summaryEl,
+  total,
+  selectedCount,
+  kindLabel = "followings"
+) {
   updateSummary(summaryEl, total, selectedCount, kindLabel);
 }
 

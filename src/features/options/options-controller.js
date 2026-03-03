@@ -173,23 +173,48 @@ function classifyFetchError(e) {
   const msg = (e.message || String(e)).toLowerCase();
   const name = (e.name || "").toLowerCase();
   if (name === "aborterror" || msg.includes("timeout") || msg.includes("timed out")) {
-    return { kind: "timeout", message: "La API tardó demasiado. Revisá conectividad o servidor caído." };
+    return {
+      kind: "timeout",
+      message: "La API tardó demasiado. Revisá conectividad o servidor caído.",
+    };
   }
   if (msg.includes("cors") || msg.includes("cross-origin") || msg.includes("cross origin")) {
     return { kind: "cors", message: "La API no permite CORS desde la extensión." };
   }
-  if (msg.includes("certificate") || msg.includes("ssl") || msg.includes("tls") || msg.includes("https") || msg.includes("secure")) {
-    return { kind: "tls", message: "Error de certificado/HTTPS. Probá con https:// y revisá que el certificado sea válido." };
+  if (
+    msg.includes("certificate") ||
+    msg.includes("ssl") ||
+    msg.includes("tls") ||
+    msg.includes("https") ||
+    msg.includes("secure")
+  ) {
+    return {
+      kind: "tls",
+      message:
+        "Error de certificado/HTTPS. Probá con https:// y revisá que el certificado sea válido.",
+    };
   }
-  if (msg.includes("failed to fetch") || msg.includes("networkerror") || msg.includes("network error") || msg.includes("load failed")) {
+  if (
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("network error") ||
+    msg.includes("load failed")
+  ) {
     return { kind: "dns", message: "" };
   }
   return { kind: "unknown", message: "Error de red. Revisá URL, certificado HTTPS o CORS." };
 }
 
 function isLikelyHtmlResponse(text) {
-  const t = String(text || "").trim().toLowerCase();
-  return t.startsWith("<!doctype html") || t.startsWith("<html") || t.includes("<head") || t.includes("<body");
+  const t = String(text || "")
+    .trim()
+    .toLowerCase();
+  return (
+    t.startsWith("<!doctype html") ||
+    t.startsWith("<html") ||
+    t.includes("<head") ||
+    t.includes("<body")
+  );
 }
 
 function summarizeHtmlResponse(status, text) {
@@ -215,9 +240,13 @@ function unwrapApiDataEnvelope(payload) {
 
 function classifyLoginFailure(result) {
   const status = Number(result?.status || 0) || 0;
-  const code = String(result?.error?.code || "").trim().toUpperCase();
+  const code = String(result?.error?.code || "")
+    .trim()
+    .toUpperCase();
   if (status === 426 || code === "CLIENT_UPDATE_REQUIRED") return "update_required";
-  const blockingQuota = String(result?.error?.details?.blocking_quota || "").trim().toLowerCase();
+  const blockingQuota = String(result?.error?.details?.blocking_quota || "")
+    .trim()
+    .toLowerCase();
   if (
     status === 403 ||
     code === "PLAN_EXPIRED" ||
@@ -228,7 +257,8 @@ function classifyLoginFailure(result) {
     return "plan_expired";
   }
   if (status === 429 || code === "RATE_LIMIT_EXCEEDED") return "rate_limit";
-  if (status === 401 || status === 403 || code === "UNAUTHORIZED" || code === "INVALID_API_KEY") return "auth";
+  if (status === 401 || status === 403 || code === "UNAUTHORIZED" || code === "INVALID_API_KEY")
+    return "auth";
   if (status === 0 || code === "NETWORK_ERROR" || code === "REQUEST_TIMEOUT") return "network";
   return "unknown";
 }
@@ -243,25 +273,30 @@ const VERSION_BLOCK_STATE_KEY = "version_block_state";
 function toVersionBlockDetails(errorDetails) {
   if (!errorDetails || typeof errorDetails !== "object") return {};
   return {
-    minRequiredVersion: String(errorDetails.minRequiredVersion || errorDetails.min_required_version || "").trim(),
+    minRequiredVersion: String(
+      errorDetails.minRequiredVersion || errorDetails.min_required_version || ""
+    ).trim(),
     latestVersion: String(errorDetails.latestVersion || errorDetails.latest_version || "").trim(),
     updateUrl: String(errorDetails.updateUrl || errorDetails.update_url || "").trim(),
   };
 }
 
 async function persistPlanBlockState(loginResult) {
-  const details = loginResult?.error?.details && typeof loginResult.error.details === "object"
-    ? loginResult.error.details
-    : null;
+  const details =
+    loginResult?.error?.details && typeof loginResult.error.details === "object"
+      ? loginResult.error.details
+      : null;
   const planName =
-    String(details?.plan_name || "").trim() ||
-    String(details?.plan_id || "").trim() ||
-    "Free";
+    String(details?.plan_name || "").trim() || String(details?.plan_id || "").trim() || "Free";
   await storageLocalSet({
     [PLAN_BLOCK_STATE_KEY]: {
-      code: String(loginResult?.error?.code || "PLAN_EXPIRED").trim().toUpperCase(),
+      code: String(loginResult?.error?.code || "PLAN_EXPIRED")
+        .trim()
+        .toUpperCase(),
       status: Number(loginResult?.status || 0) || 403,
-      message: String(loginResult?.error?.message || "Tu plan venció. Renovalo para seguir usando el servicio."),
+      message: String(
+        loginResult?.error?.message || "Tu plan venció. Renovalo para seguir usando el servicio."
+      ),
       details,
       plan_name: planName,
       ts: Date.now(),
@@ -279,7 +314,9 @@ async function persistVersionBlockState(result) {
     [VERSION_BLOCK_STATE_KEY]: {
       code: "CLIENT_UPDATE_REQUIRED",
       status: Number(result?.status || 0) || 426,
-      message: String(result?.error?.message || "A newer version of the extension is required.").trim(),
+      message: String(
+        result?.error?.message || "A newer version of the extension is required."
+      ).trim(),
       details,
       update_url: details.updateUrl || "",
       ts: Date.now(),
@@ -310,7 +347,8 @@ function showVersionBlockScreen(state) {
 
   const details = toVersionBlockDetails(state?.details);
   const message = String(state?.message || "A newer version of the extension is required.").trim();
-  const updateUrl = details.updateUrl || String(state?.update_url || "").trim() || "https://github.com";
+  const updateUrl =
+    details.updateUrl || String(state?.update_url || "").trim() || "https://github.com";
   const minRequired = details.minRequiredVersion;
   const latest = details.latestVersion;
 
@@ -432,7 +470,11 @@ async function fetchPingWithHeaders(baseUrl, headers) {
     clearTimeout(to);
     const text = await r.text();
     let data = {};
-    try { data = JSON.parse(text); } catch (_) { data = {}; }
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      data = {};
+    }
     const payload = unwrapApiDataEnvelope(data);
     if (!r.ok) {
       const err = data?.error && typeof data.error === "object" ? data.error : {};
@@ -452,13 +494,23 @@ async function fetchPingWithHeaders(baseUrl, headers) {
       };
     }
     const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
-    const defaultFromAccount = (payload.default_from_account != null && String(payload.default_from_account).trim())
-      ? String(payload.default_from_account).trim().toLowerCase()
-      : null;
+    const defaultFromAccount =
+      payload.default_from_account != null && String(payload.default_from_account).trim()
+        ? String(payload.default_from_account).trim().toLowerCase()
+        : null;
     const accountUsername = defaultFromAccount
       ? defaultFromAccount
-      : (accounts.length > 0 ? String(accounts[0]).trim().toLowerCase() : null);
-    return { urlOk: true, tokenOk: true, status: r.status, accountUsername, defaultFromAccount, accounts };
+      : accounts.length > 0
+        ? String(accounts[0]).trim().toLowerCase()
+        : null;
+    return {
+      urlOk: true,
+      tokenOk: true,
+      status: r.status,
+      accountUsername,
+      defaultFromAccount,
+      accounts,
+    };
   } catch (e) {
     clearTimeout(to);
     const { kind, message } = classifyFetchError(e);
@@ -535,7 +587,14 @@ function applyPromptLimits(limits) {
 
 function load() {
   chrome.storage.sync.get(
-    { api_base: "", client_id_manual: "", client_id_source: "jwt", default_limit: 50, chatgpt_prompt: "", x_client_id: "" },
+    {
+      api_base: "",
+      client_id_manual: "",
+      client_id_source: "jwt",
+      default_limit: 50,
+      chatgpt_prompt: "",
+      x_client_id: "",
+    },
     (syncCfg) => {
       chrome.storage.local.get(
         { jwt_token: "", jwt_expires_at: 0, client_id: "" },
@@ -543,7 +602,8 @@ function load() {
           const sessionCfg = await storageSessionGet({ jwt_token: "", jwt_expires_at: 0 });
           const apiToken = "";
           const jwtToken = (localCfg.jwt_token || sessionCfg.jwt_token || "").trim();
-          const jwtExpiresAt = Number(localCfg.jwt_expires_at || sessionCfg.jwt_expires_at || 0) || 0;
+          const jwtExpiresAt =
+            Number(localCfg.jwt_expires_at || sessionCfg.jwt_expires_at || 0) || 0;
           const cfg = {
             ...syncCfg,
             ...localCfg,
@@ -563,7 +623,7 @@ function load() {
 
           sessionJwtExpiresAt = Number(authState.accessExpiresAt || cfg.jwt_expires_at || 0) || 0;
 
-          ["api_base","api_token","default_limit","chatgpt_prompt"].forEach((id) => {
+          ["api_base", "api_token", "default_limit", "chatgpt_prompt"].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.addEventListener("input", refreshCfgStatus);
             if (el) el.addEventListener("change", refreshCfgStatus);
@@ -571,7 +631,9 @@ function load() {
 
           const promptTa = $("#chatgpt_prompt");
           if (promptTa) {
-            promptTa.addEventListener("input", () => applyPromptLimits({ max_client_prompt_length: PROMPT_MAX_CHARS }));
+            promptTa.addEventListener("input", () =>
+              applyPromptLimits({ max_client_prompt_length: PROMPT_MAX_CHARS })
+            );
           }
 
           const base = normalizeBaseUrl(cfg.api_base);
@@ -582,7 +644,11 @@ function load() {
           }
           refreshCfgStatus();
           const versionBlock = await loadVersionBlockState();
-          if (String(versionBlock?.code || "").trim().toUpperCase() === "CLIENT_UPDATE_REQUIRED") {
+          if (
+            String(versionBlock?.code || "")
+              .trim()
+              .toUpperCase() === "CLIENT_UPDATE_REQUIRED"
+          ) {
             showVersionBlockScreen(versionBlock);
           } else {
             hideVersionBlockScreen();
@@ -597,13 +663,35 @@ async function performJwtLogin(requestPermission = false) {
   const base = normalizeBaseUrl($("#api_base").value);
   const apiKey = ($("#api_token").value || "").trim();
 
-  if (!base) return { ok: false, status: 0, error: { code: "CONFIG_REQUIRED", message: "Configura la API primero." } };
-  if (!isSecureApiBase(base)) return { ok: false, status: 0, error: { code: "HTTPS_REQUIRED", message: "La API debe usar HTTPS." } };
+  if (!base)
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "CONFIG_REQUIRED", message: "Configura la API primero." },
+    };
+  if (!isSecureApiBase(base))
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "HTTPS_REQUIRED", message: "La API debe usar HTTPS." },
+    };
   const hasPermission = await ensureApiHostPermission(base, requestPermission);
   if (!hasPermission) {
-    return { ok: false, status: 0, error: { code: "HOST_PERMISSION_REQUIRED", message: "Falta permiso para conectar con el dominio de la API." } };
+    return {
+      ok: false,
+      status: 0,
+      error: {
+        code: "HOST_PERMISSION_REQUIRED",
+        message: "Falta permiso para conectar con el dominio de la API.",
+      },
+    };
   }
-  if (!apiKey) return { ok: false, status: 0, error: { code: "API_KEY_REQUIRED", message: "Configura la API Key primero." } };
+  if (!apiKey)
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "API_KEY_REQUIRED", message: "Configura la API Key primero." },
+    };
 
   try {
     const loginResp = await chrome.runtime.sendMessage({
@@ -615,7 +703,10 @@ async function performJwtLogin(requestPermission = false) {
       return {
         ok: false,
         status: Number(loginResp?.status || 0) || 0,
-        error: loginResp?.error || { code: "AUTH_ERROR", message: "No se pudo iniciar sesión. Revisá la API Key." },
+        error: loginResp?.error || {
+          code: "AUTH_ERROR",
+          message: "No se pudo iniciar sesión. Revisá la API Key.",
+        },
       };
     }
     const authState = await getAuthStateFromBackground();
@@ -625,7 +716,11 @@ async function performJwtLogin(requestPermission = false) {
       client_id: authState.clientId,
     };
   } catch {
-    return { ok: false, status: 0, error: { code: "NETWORK_ERROR", message: "Error de red o permisos." } };
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "NETWORK_ERROR", message: "Error de red o permisos." },
+    };
   }
 }
 
@@ -668,7 +763,11 @@ async function logoutSession({ allDevices = false } = {}) {
   if ($("#health_result")) $("#health_result").value = "—";
 
   if (remoteResult.ok) {
-    setSaveStatus(allDevices ? "Sesión cerrada en todos los dispositivos." : "Sesión cerrada en este dispositivo.");
+    setSaveStatus(
+      allDevices
+        ? "Sesión cerrada en todos los dispositivos."
+        : "Sesión cerrada en este dispositivo."
+    );
   } else if (allDevices) {
     setSaveStatus("Sesión local cerrada. La revocación global no está disponible en tu API.", true);
   } else {
@@ -719,19 +818,26 @@ async function save() {
       showVersionBlockScreen({
         message: loginResult?.error?.message,
         details: loginResult?.error?.details,
-        update_url: loginResult?.error?.details?.updateUrl || loginResult?.error?.details?.update_url,
+        update_url:
+          loginResult?.error?.details?.updateUrl || loginResult?.error?.details?.update_url,
       });
       setSaveStatus("Guardado, pero tu extension debe actualizarse para continuar.", true);
     } else if (failureType === "plan_expired") {
       await persistPlanBlockState(loginResult);
       await clearVersionBlockState();
       hideVersionBlockScreen();
-      setSaveStatus("Guardado, pero tu plan venció. Renovalo para seguir usando el servicio.", true);
+      setSaveStatus(
+        "Guardado, pero tu plan venció. Renovalo para seguir usando el servicio.",
+        true
+      );
     } else if (failureType === "rate_limit") {
       await clearPlanBlockState();
       await clearVersionBlockState();
       hideVersionBlockScreen();
-      setSaveStatus("Guardado, pero el login fue limitado temporalmente (429). Esperá unos segundos y reintentá.", true);
+      setSaveStatus(
+        "Guardado, pero el login fue limitado temporalmente (429). Esperá unos segundos y reintentá.",
+        true
+      );
     } else if (failureType === "auth") {
       await clearPlanBlockState();
       await clearVersionBlockState();
@@ -741,7 +847,10 @@ async function save() {
       await clearPlanBlockState();
       await clearVersionBlockState();
       hideVersionBlockScreen();
-      setSaveStatus("Guardado, pero no se pudo conectar con la API. Revisá URL base e intentá de nuevo.", true);
+      setSaveStatus(
+        "Guardado, pero no se pudo conectar con la API. Revisá URL base e intentá de nuevo.",
+        true
+      );
     }
     chrome.storage.sync.set(syncCfg, async () => {
       if (apiToken) await clearAuthState();
@@ -795,15 +904,16 @@ async function testHealth() {
       hideVersionBlockScreen();
     }
     if (resultEl) {
-      resultEl.value = failureType === "plan_expired"
-        ? "Tu plan venció. Renovalo para seguir usando el servicio."
-        : failureType === "update_required"
-        ? "Debes actualizar la extension para continuar."
-        : failureType === "rate_limit"
-        ? "Login limitado temporalmente (429). Esperá unos segundos y reintentá."
-        : failureType === "auth"
-          ? "No se pudo iniciar sesión. Revisá la API Key."
-          : "No se pudo conectar con la API. Revisá URL base e intentá de nuevo.";
+      resultEl.value =
+        failureType === "plan_expired"
+          ? "Tu plan venció. Renovalo para seguir usando el servicio."
+          : failureType === "update_required"
+            ? "Debes actualizar la extension para continuar."
+            : failureType === "rate_limit"
+              ? "Login limitado temporalmente (429). Esperá unos segundos y reintentá."
+              : failureType === "auth"
+                ? "No se pudo iniciar sesión. Revisá la API Key."
+                : "No se pudo conectar con la API. Revisá URL base e intentá de nuevo.";
     }
     setCfgStatus("err", "Login falló");
     return;
@@ -819,7 +929,8 @@ async function test() {
   if (!base) return ($("#health_result").value = "Configura la API primero.");
   if (!isSecureApiBase(base)) return ($("#health_result").value = "La API debe usar HTTPS.");
   const hasPermission = await ensureApiHostPermission(base, true);
-  if (!hasPermission) return ($("#health_result").value = "No se concedió permiso para el dominio de la API.");
+  if (!hasPermission)
+    return ($("#health_result").value = "No se concedió permiso para el dominio de la API.");
 
   const url = buildApiUrl(base, API_PATHS.health);
   $("#health_result").value = "Probando…";
@@ -828,7 +939,11 @@ async function test() {
     const r = await fetch(url, { headers: buildClientHeaders() });
     const t = await r.text();
     let data;
-    try { data = t ? JSON.parse(t) : {}; } catch (_) { data = {}; }
+    try {
+      data = t ? JSON.parse(t) : {};
+    } catch (_) {
+      data = {};
+    }
     if (r.ok) {
       $("#health_result").value = "OK";
       await clearVersionBlockState();
@@ -844,7 +959,10 @@ async function test() {
           update_url: data?.error?.details?.updateUrl || data?.error?.details?.update_url,
         });
       }
-      const retrySec = typeof window.retryAfterFromResponse === "function" ? window.retryAfterFromResponse(r, data) : null;
+      const retrySec =
+        typeof window.retryAfterFromResponse === "function"
+          ? window.retryAfterFromResponse(r, data)
+          : null;
       const msg = toUserApiError(r.status, data, t, retrySec);
       $("#health_result").value = msg;
       setCfgStatus("warn", r.status === 429 ? "Demasiadas solicitudes" : "API responde con error");
@@ -934,7 +1052,8 @@ async function fetchQuotas() {
     return;
   }
   if (!(await ensureApiHostPermission(base, false))) {
-    if (loadingEl) loadingEl.textContent = "Concedé permiso al dominio de la API desde Guardar configuración.";
+    if (loadingEl)
+      loadingEl.textContent = "Concedé permiso al dominio de la API desde Guardar configuración.";
     if (contentEl) contentEl.style.display = "none";
     return;
   }
@@ -958,8 +1077,7 @@ async function fetchQuotas() {
     } else if (r?.username) {
       tabAccount = "@" + r.username;
       fromAccount = String(r.username).trim();
-    }
-    else if (r?.error === "no_instagram_tab") tabAccount = "abrí Instagram en una pestaña";
+    } else if (r?.error === "no_instagram_tab") tabAccount = "abrí Instagram en una pestaña";
   } catch (_) {}
   const tabEl = $("#quotas_tab_account");
   if (tabEl) tabEl.textContent = "Cuenta en pestaña: " + tabAccount;
@@ -973,7 +1091,9 @@ async function fetchQuotas() {
 
   try {
     if (!fromAccount) {
-      if (loadingEl) loadingEl.textContent = "No se pudo detectar from_account. Abrí Instagram o configurá una cuenta default en la API.";
+      if (loadingEl)
+        loadingEl.textContent =
+          "No se pudo detectar from_account. Abrí Instagram o configurá una cuenta default en la API.";
       if (contentEl) contentEl.style.display = "none";
       return;
     }
@@ -981,7 +1101,11 @@ async function fetchQuotas() {
     const r = await fetch(url, { headers: buildClientHeaders(headers) });
     const text = await r.text();
     let data = null;
-    try { data = JSON.parse(text); } catch { data = null; }
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
     const payload = unwrapApiDataEnvelope(data);
     if (!r.ok || !data) {
       const failureType = classifyLoginFailure({ status: r.status, error: data?.error || {} });
@@ -993,7 +1117,10 @@ async function fetchQuotas() {
           update_url: data?.error?.details?.updateUrl || data?.error?.details?.update_url,
         });
       }
-      const retrySec = typeof window.retryAfterFromResponse === "function" ? window.retryAfterFromResponse(r, data || {}) : null;
+      const retrySec =
+        typeof window.retryAfterFromResponse === "function"
+          ? window.retryAfterFromResponse(r, data || {})
+          : null;
       const msg = r.status
         ? toUserApiError(r.status, data || {}, text, retrySec)
         : "Error de red. Revisá token y API.";
@@ -1032,7 +1159,10 @@ async function fetchQuotas() {
     if (listEl) {
       listEl.innerHTML = "";
       const items = accounts.length > 0 ? accounts : [];
-      const showCookiePlaceholder = items.length === 0 && tabAccount !== "no detectada" && tabAccount !== "abrí Instagram en una pestaña";
+      const showCookiePlaceholder =
+        items.length === 0 &&
+        tabAccount !== "no detectada" &&
+        tabAccount !== "abrí Instagram en una pestaña";
       if (items.length === 0 && showCookiePlaceholder) {
         const limitStr = safeDailyLimit <= 0 ? "∞" : String(safeDailyLimit);
         const card = document.createElement("div");
@@ -1051,9 +1181,12 @@ async function fetchQuotas() {
         listEl.appendChild(card);
       } else {
         items.forEach((acc, idx) => {
-          const name = typeof acc === "object" && acc && (acc.username != null) ? acc.username : String(acc);
-          const usedRaw = typeof acc === "object" && acc && (acc.used_today != null) ? acc.used_today : 0;
-          const limRaw = typeof acc === "object" && acc && (acc.daily_limit != null) ? acc.daily_limit : safety;
+          const name =
+            typeof acc === "object" && acc && acc.username != null ? acc.username : String(acc);
+          const usedRaw =
+            typeof acc === "object" && acc && acc.used_today != null ? acc.used_today : 0;
+          const limRaw =
+            typeof acc === "object" && acc && acc.daily_limit != null ? acc.daily_limit : safety;
           const used = Number(usedRaw) || 0;
           const lim = Number(limRaw);
           const safeAccLimit = Number.isFinite(lim) ? lim : 0;
