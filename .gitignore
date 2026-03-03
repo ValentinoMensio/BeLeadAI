@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release.zip
+extension-v*.zip
+extension-v*.sha256
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "BeLeadAI Enqueuer",
+  "description": "Encola fetch_followings y envía mensajes usando la cuenta del cliente.",
+  "version": "0.3.0",
+  "action": {
+    "default_title": "BeLeadAI",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/logo.png",
+      "48": "icons/logo.png",
+      "128": "icons/logo.png"
+    }
+  },
+  "icons": {
+    "16": "icons/logo.png",
+    "48": "icons/logo.png",
+    "128": "icons/logo.png"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "cookies",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://instagram.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/entries/background-entry.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
+      "js": [
+        "src/platform/content/modules/selectors.js",
+        "src/platform/content/modules/observers.js",
+        "src/platform/content/modules/actions.js",
+        "src/platform/content/modules/messaging.js",
+        "src/platform/content/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'self'"
+  }
+}

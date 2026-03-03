@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BeLeadAI</title>
+  <link rel="stylesheet" href="src/styles/base.css">
+  <link rel="stylesheet" href="src/styles/components.css">
+  <link rel="stylesheet" href="src/styles/popup.css">
+</head>
+
+<body class="popup-root">
+  <!-- ========== APP WRAPPER ========== -->
+  <div class="app">
+    <div class="panel">
+      <!-- ---------- Header (marca + status pill) ---------- -->
+      <div class="header">
+        <div class="brand">
+          <div class="brand-title">
+            <img class="brand-logo" src="icons/logo.svg" alt="" aria-hidden="true" />
+            <div class="title logo-text">BeLeadAI</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="status-pill" id="cfgStatus">
+            <span class="dot" id="cfgDot"></span>
+            <span id="cfgText">Config</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget de límites (diario/mensual) -->
+      <div id="limits-widget" class="limits-widget is-hidden">
+        <div id="limits-alert" class="limits-alert"></div>
+        <div id="limits-summary" class="limits-summary loading">
+          <div class="limits-block limits-block-client">
+            <div class="limits-status-line">
+              <span id="limits-row-day" class="limits-item limit-ok" data-type="day" title="Clic para ver detalle">
+                <span id="limits-circle-day" class="limits-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></span>
+                <span class="limits-item-text">Hoy</span>
+              </span>
+              <span id="limits-row-month" class="limits-item limit-ok" data-type="month" title="Clic para ver detalle">
+                <span id="limits-circle-month" class="limits-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></span>
+                <span class="limits-item-text">Plan</span>
+              </span>
+            </div>
+          </div>
+          <div id="limits-detail" class="limits-detail"></div>
+          <div id="limits-update" class="limits-update"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Pantalla de inicio (falta API/config) ---------- -->
+      <div id="setup-screen" class="setup-screen">
+        <div class="icon"><img class="setup-icon-img" src="icons/gear.svg" alt="" aria-hidden="true" /></div>
+        <h2>Configuración necesaria</h2>
+        <p>Para usar BeLeadAI configurá la conexión en Opciones.</p>
+        <div class="checklist" id="setup-checklist">
+          <div class="checklist-item" id="check-api">
+            <span class="check-icon">○</span>
+            <span>Servidor</span>
+          </div>
+          <div class="checklist-item" id="check-token">
+            <span class="check-icon">○</span>
+            <span>Clave de acceso</span>
+          </div>
+          <div class="checklist-item" id="check-tab-account" title="Cuenta con la que estás logueado en la pestaña de Instagram.">
+            <span class="check-icon" id="check-tab-icon">○</span>
+            <span id="check-tab-label">Cuenta en pestaña: —</span>
+          </div>
+        </div>
+        <p id="setup-network-error" class="setup-network-error is-hidden"></p>
+      </div>
+
+      <div id="expired-screen" class="expired-screen">
+        <div class="icon"><img class="expired-icon-img" src="icons/padlock.svg" alt="" aria-hidden="true" /></div>
+        <h2 class="expired-title">Tu plan esta <span>pausado</span></h2>
+        <p id="expired-plan-message" class="expired-plan-message">Tu plan <strong id="expired-plan-name">Free</strong> vencio. Para seguir enviando mensajes y generando leads, <span class="expired-plan-accent">actualiza tu suscripcion</span>.</p>
+        <div class="expired-cta-block">
+          <a
+            class="expired-btn expired-btn-primary"
+            href="https://mail.google.com/mail/?view=cm&fs=1&to=beleadai.contact@gmail.com&su=Reactivar%20plan%20BeLeadAI&body=Hola%2C%20quiero%20reactivar%20mi%20plan."
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img class="expired-btn-icon-img" src="icons/mailw.svg" alt="" aria-hidden="true" />
+            Reactivar ahora
+          </a>
+          <a class="expired-btn expired-btn-secondary" href="options.html" target="_blank" rel="noopener noreferrer">Ver planes</a>
+        </div>
+      </div>
+
+      <div id="update-required-screen" class="update-required-screen">
+        <div class="icon"><img class="expired-icon-img" src="icons/padlock.svg" alt="" aria-hidden="true" /></div>
+        <h2 class="expired-title">Actualizacion <span>obligatoria</span></h2>
+        <p id="update-required-message" class="expired-plan-message">Necesitas instalar la version mas reciente para continuar.</p>
+        <p id="update-required-versions" class="update-required-versions"></p>
+        <div class="expired-cta-block">
+          <a id="update-required-action" class="expired-btn expired-btn-primary" href="#" target="_blank" rel="noopener noreferrer">Actualizar extension</a>
+        </div>
+      </div>
+
+      <!-- ---------- UI principal (tabs Analizar / Enviar) ---------- -->
+      <div id="main-ui">
+        <div class="tabs">
+          <button class="tab active" data-tab="fetch">
+            <span class="tab-icon"><img class="tab-icon-img" src="icons/magnifying.svg" alt="" aria-hidden="true" /></span>
+            <span>Analizar</span>
+          </button>
+          <button class="tab" data-tab="send">
+            <span class="tab-icon"><img class="tab-icon-img" src="icons/send.svg" alt="" aria-hidden="true" /></span>
+            <span>Enviar</span>
+          </button>
+        </div>
+
+        <div class="content">
+        <!-- ---------- TAB: EXTRAER (followings / analizar) ---------- -->
+        <div id="tab-fetch" class="tab-content active">
+          <div class="section">
+            <p class="section-title">
+              <span class="section-title-icon"><img class="section-title-icon-img" src="icons/bar_chart.svg" alt="" aria-hidden="true" /></span>
+              Análisis
+            </p>
+
+            <label for="mode">Modo de análisis</label>
+            <select id="mode">
+              <option value="followings">Followings de una cuenta</option>
+              <option value="analyze">Analizar perfiles específicos</option>
+            </select>
+
+            <div id="followings_fields">
+              <label for="target">Cuenta origen</label>
+              <input id="target" placeholder="@usuario objetivo" autocomplete="off" />
+
+              <label for="limit">Cantidad de leads</label>
+              <div class="limit-stepper">
+                <button type="button" class="limit-stepper-btn limit-stepper-minus" aria-label="Bajar límite">−</button>
+                <input id="limit" type="number" min="1" step="1" value="50" />
+                <button type="button" class="limit-stepper-btn limit-stepper-plus" aria-label="Subir límite">+</button>
+              </div>
+
+              <button type="button" class="advanced-toggle" id="advanced-toggle-fetch" aria-expanded="false">
+                <span><img class="inline-icon-img" src="icons/gear.svg" alt="" aria-hidden="true" />Configuración de análisis</span>
+              </button>
+              <div id="advanced-options-fetch" class="advanced-options">
+                <div class="analysis-config-panel">
+                  <div class="analysis-header">
+                    <h4>Profundidad de análisis</h4>
+                    <p>Define qué perfiles recibirán análisis completo tras la extracción.</p>
+                  </div>
+                  
+                  <div class="analysis-modes">
+                    <label class="analysis-mode-card">
+                      <input type="radio" name="analysis_depth" value="all" checked />
+                      <div class="mode-content">
+                        <span class="mode-title">Análisis completo</span>
+                        <span class="mode-description">Todos los perfiles extraídos.</span>
+                      </div>
+                      <span class="mode-check">✓</span>
+                    </label>
+                    
+                    <label class="analysis-mode-card">
+                      <input type="radio" name="analysis_depth" value="only_rubros" />
+                      <div class="mode-content">
+                        <span class="mode-title">Filtrado por categoría</span>
+                        <span class="mode-description">Solo tipos seleccionados.</span>
+                      </div>
+                      <span class="mode-check">✓</span>
+                    </label>
+                    
+                    <label class="analysis-mode-card">
+                      <input type="radio" name="analysis_depth" value="basic_only" />
+                      <div class="mode-content">
+                        <span class="mode-title">Básico únicamente</span>
+                        <span class="mode-description">Snapshot + categorización.</span>
+                      </div>
+                      <span class="mode-check">✓</span>
+                    </label>
+                  </div>
+                  
+                  <div id="deep_rubros_container" class="deep-rubros-container is-hidden">
+                    <label class="category-filter-label">Categorías para análisis profundo</label>
+                    <div id="deep_rubros_chips" class="chips-wrap"></div>
+                  </div>
+                  
+                  <p id="analysis_depth_warning" class="analysis-depth-warning is-hidden" role="alert">No se hará análisis profundo a ningún perfil.</p>
+                </div>
+              </div>
+
+              <div class="primary-action-wrap">
+                <button id="enqueue" class="btn primary block">▶ Iniciar análisis</button>
+              </div>
+            </div>
+
+            <div id="analyze_fields" class="is-hidden">
+              <label for="usernames">Usernames (uno por línea o coma)</label>
+              <textarea id="usernames" rows="4" placeholder="user1&#10;user2, user3"></textarea>
+              <input id="batch_size" type="hidden" value="25" />
+              <div class="primary-action-wrap">
+                <button id="enqueue_analyze" class="btn primary block">▶ Iniciar análisis</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Resultados separados del formulario -->
+          <div class="section section-results">
+            <p class="section-title">
+              <span class="section-title-icon"><img class="section-title-icon-img" src="icons/board.svg" alt="" aria-hidden="true" /></span>
+              Resultados
+            </p>
+
+            <label for="last_jobs_select">Cargar sesión anterior</label>
+            <select id="last_jobs_select">
+              <option value="">— Seleccionar —</option>
+            </select>
+
+            <div id="job_progress" class="is-hidden">
+              <div class="progress"><div id="progress_fill"></div></div>
+            </div>
+
+            <div class="status-line" id="status"></div>
+            <div class="status-meta" id="fetch_last_sync">Sin sincronizar</div>
+          </div>
+        </div>
+
+        <!-- ---------- TAB: ENVIAR (origen destinatarios + mensaje) ---------- -->
+        <div id="tab-send" class="tab-content">
+          <div class="section">
+            <p class="section-title">
+              <span class="section-title-icon"><img class="section-title-icon-img" src="icons/user.svg" alt="" aria-hidden="true" /></span>
+              Destinatarios
+            </p>
+
+            <p class="hint send-tab-account-hint" id="send-tab-account-hint">
+              Enviarás desde: <b>—</b> <span class="hint-sub">(abrí instagram.com en una pestaña)</span>
+            </p>
+
+            <label for="send_recipients_job_select">Origen de destinatarios</label>
+            <select id="send_recipients_job_select">
+              <option value="">— Cargar resultados —</option>
+            </select>
+
+            <div id="send_recipients_info" class="recipients-info is-hidden">
+              <span class="hint" id="send_recipients_summary"></span>
+              <button type="button" class="recipients-toggle" id="recipients_toggle" aria-expanded="false">
+                <span id="recipients_toggle_label">Ver destinatarios</span>
+                <span class="recipients-toggle-icon">▼</span>
+              </button>
+              <div id="recipients_actions" class="recipients-actions is-hidden">
+                <button type="button" class="recipients-action-btn" data-action="select-all">Todos</button>
+                <button type="button" class="recipients-action-btn" data-action="deselect-all">Ninguno</button>
+              </div>
+              <div id="send_recipients_list" class="recipients-list is-hidden"></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <p class="section-title">
+              <span class="section-title-icon"><img class="section-title-icon-img" src="icons/send.svg" alt="" aria-hidden="true" /></span>
+              Mensaje
+            </p>
+
+            <div class="send-options-row">
+              <label for="use_chatgpt" class="send-option-card">
+                <input type="checkbox" id="use_chatgpt" />
+                <div class="send-option-content">
+                  <span class="send-option-title"><img class="send-option-icon-img" src="icons/robot.svg" alt="" aria-hidden="true" />MODO IA</span>
+                  <span class="send-option-desc">Personaliza cada mensaje según el perfil.</span>
+                </div>
+                <span class="send-option-check">✓</span>
+              </label>
+
+              <label for="dry_run" class="send-option-card">
+                <input type="checkbox" id="dry_run" checked />
+                <div class="send-option-content">
+                  <span class="send-option-title"><img class="send-option-icon-img" src="icons/test.svg" alt="" aria-hidden="true" />Dry-run</span>
+                  <span class="send-option-desc">Simula sin enviar realmente.</span>
+                </div>
+                <span class="send-option-check">✓</span>
+              </label>
+            </div>
+
+            <label for="send_message" id="send_message_label">Texto del mensaje</label>
+            <textarea id="send_message" placeholder="Hola! Me gustaría contactarte..."></textarea>
+            <div class="hint" id="send_message_hint">Caracteres: <span id="message_char_count">0</span>/—</div>
+
+            <!-- Botones de acción en fila -->
+            <div class="send-actions-row">
+              <button id="start_sender" class="btn primary send-btn-start">▶ Iniciar envío</button>
+              <button id="stop_sender" class="btn danger send-btn-stop" disabled>■ Detener</button>
+            </div>
+
+            <div id="send_job_progress_section" class="send-job-progress is-hidden">
+              <div class="progress"><div id="send_progress_fill"></div></div>
+            </div>
+
+            <div class="status-line" id="send_status">Listo para configurar.</div>
+            <div class="status-meta" id="send_last_sync">Sin sincronizar</div>
+
+            <div class="divider"></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+
+      <!-- ---------- Footer (link a Opciones) ---------- -->
+      <div class="footer-note" id="footer-note" title="Abrir Opciones">
+        <span class="footer-icon"><img class="footer-icon-img" src="icons/gear.svg" alt="" aria-hidden="true" /></span>
+        <span>Configuración avanzada en <b>Opciones</b></span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/shared/errors/api-errors.js"></script>
+  <script type="module" src="src/entries/popup-entry.js"></script>
+</body>
+</html>

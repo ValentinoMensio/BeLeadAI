@@ -1,0 +1,21 @@
+{
+  "name": "scrapinsta-enqueuer-mv3",
+  "private": true,
+  "version": "0.3.0",
+  "scripts": {
+    "build": "npm run build:release",
+    "build:release": "node scripts/build-release.mjs",
+    "check:contract": "node scripts/contract-smoke.mjs",
+    "pack:release": "npm run build:release && node scripts/pack-release.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "lint": "eslint \"src/**/*.js\" \"scripts/**/*.mjs\" \"*.js\"",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
+  },
+  "devDependencies": {
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.5.0"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "api_base": "https://api.example.com",
+  "api_key": "replace_with_private_key",
+  "notes": "Example only. Do not commit real credentials."
+}

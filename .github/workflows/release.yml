@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality checks
+        run: |
+          npm run lint
+          npm run format:check
+          npm run test
+
+      - name: Build release artifacts
+        run: npm run pack:release
+
+      - name: Resolve artifact names
+        run: |
+          echo "VERSION=$(node -p \"require('./manifest.json').version\")" >> "$GITHUB_ENV"
+
+      - name: Validate artifacts
+        run: |
+          test -f "extension-v${VERSION}.zip"
+          test -f "extension-v${VERSION}.sha256"
+          test -f "RELEASE_NOTES.md"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: |
+            extension-v${{ env.VERSION }}.zip
+            extension-v${{ env.VERSION }}.sha256
+            RELEASE_NOTES.md
