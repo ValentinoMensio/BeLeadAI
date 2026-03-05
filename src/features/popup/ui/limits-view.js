@@ -375,9 +375,6 @@ function showLimitDetail(type) {
     const sentToday = resolveSentToday(limitsData.messages, usedToday);
     let dayHtml = '<div class="detail-title">Límite diario por cuenta (seguridad)</div>';
     dayHtml += `<div class="detail-line">Enviados hoy: <strong>${sentToday}</strong> / ${limitToday != null ? limitToday : "∞"}</div>`;
-    if (usedToday > sentToday) {
-      dayHtml += `<div class="detail-line">Cupo usado hoy: <strong>${usedToday}</strong> / ${limitToday != null ? limitToday : "∞"} (incluye pendientes)</div>`;
-    }
     dayHtml += `<div class="detail-line reset-in">${escapeHtml(resetLabel)}</div>`;
     detailEl.innerHTML = dayHtml;
   } else {
