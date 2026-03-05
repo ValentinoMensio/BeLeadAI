@@ -2,10 +2,12 @@
  * WebSocket jobs: el popup no abre WS; el background lo hace. Solo pedimos conexión y escuchamos mensajes.
  */
 
+import { logApiErrorDiagnostic } from "../shared/errors/error-diagnostics.js";
+
 /** Pide al background que mantenga la conexión WS de jobs. */
 export function ensureJobsWsConnected() {
   chrome.runtime.sendMessage({ action: "ensureJobsWsConnected" }).catch((e) => {
-    console.warn("[popup] ensureJobsWsConnected failed:", e?.message || e);
+    logApiErrorDiagnostic("popup.ensure_jobs_ws_connected", e);
   });
 }
 

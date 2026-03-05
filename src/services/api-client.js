@@ -6,9 +6,27 @@
 import { API_PATHS } from "../config/endpoints.js";
 import { buildClientHeaders } from "../shared/utils/client-metadata.js";
 import { buildApiUrl } from "../shared/utils/url.js";
+import {
+  classifyRequestGroup,
+  getCircuitBlock,
+  markRateLimited,
+  markRequestSuccess,
+  runSingleFlight,
+} from "./request-coordinator.js";
 
 const DEFAULT_TIMEOUT_MS = 15000;
 const VERSION_BLOCK_STATE_KEY = "version_block_state";
+const READ_CACHE_MAX_ENTRIES = 120;
+
+const READ_CACHE_POLICY = {
+  ui_summary: { freshMs: 2500, staleMs: 120000 },
+  ui_list: { freshMs: 3000, staleMs: 90000 },
+  ui_limits: { freshMs: 8000, staleMs: 180000 },
+  ui_recipients: { freshMs: 2500, staleMs: 120000 },
+  default: { freshMs: 0, staleMs: 0 },
+};
+
+const readResponseCache = new Map();
 
 function isUpdateRequiredError(status, data) {
   const code = String(data?.error?.code || "")
@@ -59,6 +77,30 @@ function getRetryAfterSec(resp, data) {
   return null;
 }
 
+function fallbackApiErrorMessage(status) {
+  const s = Number(status || 0) || 0;
+  if (s === 401) return "API key inválida o expirada. Revisá la key en Opciones.";
+  if (s === 403) return "No tenés permiso para esta acción.";
+  if (s === 404) return "No encontrado. El recurso puede haber sido eliminado.";
+  if (s === 409) return "Conflicto con el estado actual. Probá de nuevo.";
+  if (s === 410) return "Endpoint removido. Actualizá la extensión para usar /ext/v2.";
+  if (s === 413) return "Los datos enviados son demasiado grandes.";
+  if (s === 426) return "Necesitás actualizar la extensión para continuar.";
+  if (s === 429) return "Demasiadas solicitudes. Esperá un momento antes de reintentar.";
+  if (s === 503) return "Servicio no disponible. Probá en unos minutos.";
+  if (s >= 500) return "Error interno del servidor. Probá más tarde.";
+  if (s > 0) return `Error de la API (HTTP ${s}).`;
+  return "Error de conexión.";
+}
+
+function toUserApiErrorMessage(status, data, rawText = "", retryAfterSec = null) {
+  if (typeof window.formatApiErrorForUser === "function") {
+    const formatted = window.formatApiErrorForUser(status, data, rawText, retryAfterSec);
+    if (typeof formatted === "string" && formatted.trim()) return formatted.trim();
+  }
+  return fallbackApiErrorMessage(status);
+}
+
 function buildApiError(status, data, fallbackMessage = "Error de la API.", resp = null) {
   const code = String(data?.error?.code || "").trim() || null;
   const message = String(data?.error?.message || "").trim() || fallbackMessage;
@@ -88,6 +130,113 @@ function isSecureApiBase(baseUrl) {
   }
 }
 
+function cloneJsonSafe(value) {
+  try {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+  } catch {}
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function getReadCachePolicy(group) {
+  return READ_CACHE_POLICY[group] || READ_CACHE_POLICY.default;
+}
+
+function buildReadCacheKey(method, url) {
+  return `${String(method || "GET").trim().toUpperCase()}::${String(url || "").trim()}`;
+}
+
+function clearReadCache() {
+  readResponseCache.clear();
+}
+
+function pruneReadCacheIfNeeded() {
+  if (readResponseCache.size <= READ_CACHE_MAX_ENTRIES) return;
+  let oldestKey = null;
+  let oldestTs = Infinity;
+  for (const [key, entry] of readResponseCache.entries()) {
+    const ts = Number(entry?.ts || 0) || 0;
+    if (ts < oldestTs) {
+      oldestTs = ts;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey) {
+    readResponseCache.delete(oldestKey);
+  }
+}
+
+function putReadCacheEntry(cacheKey, group, status, data) {
+  if (!cacheKey) return;
+  readResponseCache.set(cacheKey, {
+    group,
+    status: Number(status || 200) || 200,
+    data: cloneJsonSafe(data),
+    ts: Date.now(),
+  });
+  pruneReadCacheIfNeeded();
+}
+
+function getReadCacheEntry(cacheKey) {
+  if (!cacheKey) return null;
+  return readResponseCache.get(cacheKey) || null;
+}
+
+function toCachedApiResult(entry, reason, policy, nowMs = Date.now()) {
+  if (!entry || !policy) return null;
+  const ageMs = Math.max(0, nowMs - (Number(entry.ts || 0) || 0));
+  return {
+    ok: true,
+    status: Number(entry.status || 200) || 200,
+    data: cloneJsonSafe(entry.data),
+    meta: {
+      fromCache: true,
+      stale: reason !== "fresh",
+      reason,
+      ageSec: Math.max(0, Math.round(ageMs / 1000)),
+      maxFreshSec: Math.max(0, Math.round((policy.freshMs || 0) / 1000)),
+      maxStaleSec: Math.max(0, Math.round((policy.staleMs || 0) / 1000)),
+    },
+  };
+}
+
+function getCachedApiResult(cacheKey, group, mode = "fresh") {
+  const policy = getReadCachePolicy(group);
+  if (!policy || (!policy.freshMs && !policy.staleMs)) return null;
+  const entry = getReadCacheEntry(cacheKey);
+  if (!entry) return null;
+  const now = Date.now();
+  const ageMs = Math.max(0, now - (Number(entry.ts || 0) || 0));
+  if (mode === "fresh") {
+    if (ageMs > Number(policy.freshMs || 0)) return null;
+    return toCachedApiResult(entry, "fresh", policy, now);
+  }
+  if (mode === "stale") {
+    if (ageMs > Number(policy.staleMs || 0)) return null;
+    return toCachedApiResult(entry, "stale", policy, now);
+  }
+  return null;
+}
+
+function shouldCacheReadResponse(method, group, status) {
+  const m = String(method || "").trim().toUpperCase();
+  if (m !== "GET" && m !== "HEAD") return false;
+  const policy = getReadCachePolicy(group);
+  if (!policy || policy.freshMs <= 0) return false;
+  const s = Number(status || 0) || 0;
+  return s >= 200 && s < 300;
+}
+
+function isTransientResponseStatus(status) {
+  const s = Number(status || 0) || 0;
+  return s === 408 || s === 425 || s === 429 || s === 500 || s === 502 || s === 503 || s === 504;
+}
+
 /** Headers de auth desde background (centralizado; background puede refrescar JWT). */
 export async function getAuthHeaders() {
   try {
@@ -110,11 +259,20 @@ async function ensureFreshAccessToken() {
 /**
  * @param {string} baseUrl - URL base (sin trailing slash)
  * @param {string} path - path relativo a la API
- * @param {{ method?: string, body?: string | object, headers?: Record<string,string>, timeoutMs?: number }} options
+ * @param {{ method?: string, body?: string | object, headers?: Record<string,string>, timeoutMs?: number, cacheMode?: "default" | "network-only" }} options
  * @returns {Promise<{ ok: true, data: any, status: number } | { ok: false, status: number, data?: any, errorMessage: string, error: { code: string | null, message: string, details: any, traceId: string | null, retryAfterSec: number | null, status: number } }>}
  */
 export async function apiFetch(baseUrl, path, options = {}) {
-  const { method = "GET", body, headers: extraHeaders, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const {
+    method = "GET",
+    body,
+    headers: extraHeaders,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    cacheMode = "default",
+  } = options;
+  const methodUpper = String(method || "GET")
+    .trim()
+    .toUpperCase();
   const base = (baseUrl || "").trim().replace(/\/+$/, "");
   if (!base) {
     const error = buildApiError(0, {}, "URL base no configurada.");
@@ -124,9 +282,47 @@ export async function apiFetch(baseUrl, path, options = {}) {
     const error = buildApiError(0, {}, "La URL base debe usar HTTPS.");
     return { ok: false, status: 0, errorMessage: error.message, error };
   }
-  const url = buildApiUrl(base, path);
+  const pathRaw = String(path || "").trim() || "/";
+  const pathForGrouping = pathRaw.split("?")[0] || pathRaw;
+  const requestGroup = classifyRequestGroup(methodUpper, pathForGrouping);
+  const url = buildApiUrl(base, pathRaw);
+  const allowReadCache = String(cacheMode || "default").trim().toLowerCase() !== "network-only";
+  const canUseReadCache = allowReadCache && (methodUpper === "GET" || methodUpper === "HEAD");
+  const readCacheKey = canUseReadCache ? buildReadCacheKey(methodUpper, url) : "";
+
+  if (readCacheKey) {
+    const freshCached = getCachedApiResult(readCacheKey, requestGroup, "fresh");
+    if (freshCached) return freshCached;
+  }
+
+  const circuit = getCircuitBlock(methodUpper, pathForGrouping);
+  if (circuit.blocked) {
+    if (readCacheKey) {
+      const staleCached = getCachedApiResult(readCacheKey, requestGroup, "stale");
+      if (staleCached?.meta) {
+        staleCached.meta.reason = "circuit_open";
+        return staleCached;
+      }
+    }
+    const status = Number(circuit.status || 429) || 429;
+    const code = status === 503 ? "SERVICE_UNAVAILABLE" : "RATE_LIMIT_EXCEEDED";
+    const data = {
+      error: {
+        code,
+        details: {
+          retry_after: circuit.retryAfterSec,
+          endpoint_group: circuit.group,
+          blocking_quota: "client_circuit_breaker",
+        },
+      },
+    };
+    const errorMessage = toUserApiErrorMessage(status, data, "", circuit.retryAfterSec);
+    const error = buildApiError(status, data, errorMessage);
+    return { ok: false, status, data, errorMessage, error };
+  }
   const headers = await getAuthHeaders();
   if (!headers.Authorization) {
+    clearReadCache();
     const error = buildApiError(
       401,
       { error: { code: "AUTH_REQUIRED" } },
@@ -134,68 +330,102 @@ export async function apiFetch(baseUrl, path, options = {}) {
     );
     return { ok: false, status: 401, errorMessage: error.message, error };
   }
+
   const mergedHeaders = { ...headers, ...extraHeaders };
   const requestHeaders = buildClientHeaders(mergedHeaders);
   const bodyStr =
     body != null ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined;
-  const controller = new AbortController();
-  const to = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
-  const doFetch = async (headersToUse) =>
-    fetch(url, {
-      method,
-      headers: headersToUse,
-      body: bodyStr,
-      signal: controller.signal,
-    });
-  try {
-    let resp = await doFetch(requestHeaders);
-    if (resp.status === 401) {
-      const refreshed = await ensureFreshAccessToken();
-      if (refreshed) {
-        const retryHeaders = await getAuthHeaders();
-        const retryMerged = buildClientHeaders({ ...retryHeaders, ...extraHeaders });
-        resp = await doFetch(retryMerged);
+  return runSingleFlight(methodUpper, url, bodyStr, async () => {
+    const controller = new AbortController();
+    const to = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    const doFetch = async (headersToUse) =>
+      fetch(url, {
+        method,
+        headers: headersToUse,
+        body: bodyStr,
+        signal: controller.signal,
+      });
+    try {
+      let resp = await doFetch(requestHeaders);
+      if (resp.status === 401) {
+        const refreshed = await ensureFreshAccessToken();
+        if (refreshed) {
+          const retryHeaders = await getAuthHeaders();
+          const retryMerged = buildClientHeaders({ ...retryHeaders, ...extraHeaders });
+          resp = await doFetch(retryMerged);
+        }
       }
-    }
-    if (to) clearTimeout(to);
-    const text = await resp.text();
-    const data = parseJsonSafe(text, { raw: text });
-    if (!resp.ok) {
-      if (isUpdateRequiredError(resp.status, data)) {
-        persistVersionBlockState(resp.status, data);
+      if (to) clearTimeout(to);
+      const text = await resp.text();
+      const data = parseJsonSafe(text, { raw: text });
+      if (!resp.ok) {
+        if (isUpdateRequiredError(resp.status, data)) {
+          persistVersionBlockState(resp.status, data);
+        }
+        let retrySec =
+          typeof window.retryAfterFromResponse === "function"
+            ? window.retryAfterFromResponse(resp, data)
+            : null;
+        if (resp.status === 429 || resp.status === 503) {
+          const mark = markRateLimited(methodUpper, pathForGrouping, resp.status, retrySec || 0);
+          if (!retrySec || retrySec <= 0) {
+            retrySec = Math.max(1, Math.ceil(Number(mark.backoffMs || 0) / 1000));
+          }
+        }
+        if ((resp.status === 401 || resp.status === 403) && canUseReadCache) {
+          clearReadCache();
+        }
+        if (readCacheKey && isTransientResponseStatus(resp.status) && resp.status !== 426) {
+          const staleCached = getCachedApiResult(readCacheKey, requestGroup, "stale");
+          if (staleCached?.meta) {
+            staleCached.meta.reason = resp.status === 429 || resp.status === 503 ? "rate_limited" : "upstream_error";
+            return staleCached;
+          }
+        }
+        const errorMessage = toUserApiErrorMessage(resp.status, data, text, retrySec);
+        const error = buildApiError(resp.status, data, errorMessage, resp);
+        return { ok: false, status: resp.status, data, errorMessage, error };
       }
-      const retrySec =
-        typeof window.retryAfterFromResponse === "function"
-          ? window.retryAfterFromResponse(resp, data)
-          : null;
-      const errorMessage =
-        typeof window.formatApiErrorForUser === "function"
-          ? window.formatApiErrorForUser(resp.status, data, text, retrySec)
-          : data?.error?.message || `Error ${resp.status}`;
-      const error = buildApiError(resp.status, data, errorMessage, resp);
-      return { ok: false, status: resp.status, data, errorMessage, error };
-    }
-    clearVersionBlockState();
-    return { ok: true, data, status: resp.status };
-  } catch (e) {
-    if (to) clearTimeout(to);
-    if (e?.name === "AbortError") {
-      const error = buildApiError(
-        0,
-        { error: { code: "REQUEST_TIMEOUT" } },
-        "La solicitud tardó demasiado."
-      );
+      markRequestSuccess(methodUpper, pathForGrouping);
+      clearVersionBlockState();
+      if (readCacheKey && shouldCacheReadResponse(methodUpper, requestGroup, resp.status)) {
+        putReadCacheEntry(readCacheKey, requestGroup, resp.status, data);
+      }
+      return { ok: true, data, status: resp.status };
+    } catch (e) {
+      if (to) clearTimeout(to);
+      if (e?.name === "AbortError") {
+        if (readCacheKey) {
+          const staleCached = getCachedApiResult(readCacheKey, requestGroup, "stale");
+          if (staleCached?.meta) {
+            staleCached.meta.reason = "timeout";
+            return staleCached;
+          }
+        }
+        const error = buildApiError(
+          0,
+          { error: { code: "REQUEST_TIMEOUT" } },
+          "La solicitud tardó demasiado."
+        );
+        return { ok: false, status: 0, errorMessage: error.message, error };
+      }
+      const msg = (e?.message || String(e)).toLowerCase();
+      const errorMessage = msg.includes("cors")
+        ? "La API no permite CORS desde la extensión."
+        : msg.includes("failed to fetch") || msg.includes("networkerror")
+          ? "Error de red. Verificá URL o conectividad."
+          : "Error de conexión.";
+      if (readCacheKey) {
+        const staleCached = getCachedApiResult(readCacheKey, requestGroup, "stale");
+        if (staleCached?.meta) {
+          staleCached.meta.reason = "network_error";
+          return staleCached;
+        }
+      }
+      const error = buildApiError(0, { error: { code: "NETWORK_ERROR" } }, errorMessage);
       return { ok: false, status: 0, errorMessage: error.message, error };
     }
-    const msg = (e?.message || String(e)).toLowerCase();
-    const errorMessage = msg.includes("cors")
-      ? "La API no permite CORS desde la extensión."
-      : msg.includes("failed to fetch") || msg.includes("networkerror")
-        ? "Error de red. Verificá URL o conectividad."
-        : "Error de conexión.";
-    const error = buildApiError(0, { error: { code: "NETWORK_ERROR" } }, errorMessage);
-    return { ok: false, status: 0, errorMessage: error.message, error };
-  }
+  });
 }
 
 /** Clasificación de error de fetch para mensaje preciso. */
@@ -236,7 +466,8 @@ export function classifyFetchError(e) {
 
 const PING_TIMEOUT_MS = 12000;
 
-async function probeLoginFailure(cfg) {
+async function probeLoginFailure(cfg, options = {}) {
+  const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
   const apiKey = String(cfg?.api_token || "").trim();
   const apiBase = String(cfg?.api_base || "").trim();
   if (!apiKey || !apiBase || !isSecureApiBase(apiBase)) {
@@ -252,6 +483,7 @@ async function probeLoginFailure(cfg) {
     const url = buildApiUrl(apiBase.replace(/\/+$/, ""), API_PATHS.authLogin);
     const resp = await fetch(url, {
       method: "POST",
+      cache: networkOnly ? "no-store" : "default",
       headers: buildClientHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ api_key: apiKey, device_id: "00000000-0000-4000-8000-000000000099" }),
     });
@@ -264,7 +496,8 @@ async function probeLoginFailure(cfg) {
       (errorDetails?.plan_name && String(errorDetails.plan_name).trim()) ||
       (errorDetails?.plan_id && String(errorDetails.plan_id).trim()) ||
       null;
-    const apiErrorMessage = data?.error?.message ? String(data.error.message) : null;
+    const retrySec = getRetryAfterSec(resp, data);
+    const apiErrorMessage = toUserApiErrorMessage(resp.status, data, text, retrySec);
     return { errorCode, errorDetails, planName, apiErrorMessage, status: resp.status };
   } catch {
     return {
@@ -338,7 +571,8 @@ export async function fetchVersionMeta(apiBase) {
 }
 
 /** Valida URL + Token. GET /ext/v2/ping. No loguea credenciales. */
-export async function fetchPing(cfg) {
+export async function fetchPing(cfg, options = {}) {
+  const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
   const base = (cfg?.api_base || "").trim().replace(/\/+$/, "");
   const empty = {
     urlOk: false,
@@ -363,11 +597,18 @@ export async function fetchPing(cfg) {
     return { ...empty, errorMessage: error.message, error };
   }
   const headers = await getAuthHeaders();
-  const url = buildApiUrl(base, API_PATHS.ping);
+  const pingPath = networkOnly
+    ? `${API_PATHS.ping}${String(API_PATHS.ping).includes("?") ? "&" : "?"}_ts=${Date.now()}`
+    : API_PATHS.ping;
+  const url = buildApiUrl(base, pingPath);
   const controller = new AbortController();
   const to = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { headers: buildClientHeaders(headers), signal: controller.signal });
+    const r = await fetch(url, {
+      headers: buildClientHeaders(headers),
+      signal: controller.signal,
+      cache: networkOnly ? "no-store" : "default",
+    });
     clearTimeout(to);
     const text = await r.text();
     const parsed = parseJsonSafe(text, {});
@@ -380,14 +621,14 @@ export async function fetchPing(cfg) {
       parsed?.error?.details && typeof parsed.error.details === "object"
         ? parsed.error.details
         : null;
-    const apiErrorMessage = parsed?.error?.message ? String(parsed.error.message) : null;
+    const apiErrorMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
     const planName =
       (errorDetails?.plan_name && String(errorDetails.plan_name).trim()) ||
       (errorDetails?.plan_id && String(errorDetails.plan_id).trim()) ||
       null;
     const serverReachable = r.ok || r.status === 401 || r.status === 403;
     if (!serverReachable && !r.ok) {
-      const fallbackMessage = data?.error?.message || `HTTP ${r.status}`;
+      const fallbackMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
       const error = buildApiError(r.status, parsed, fallbackMessage, r);
       return {
         urlOk: false,
@@ -403,7 +644,9 @@ export async function fetchPing(cfg) {
       };
     }
     if (!headers.Authorization) {
-      const loginProbe = await probeLoginFailure(cfg);
+      const loginProbe = await probeLoginFailure(cfg, {
+        cacheMode: networkOnly ? "network-only" : "default",
+      });
       return {
         urlOk: true,
         tokenOk: false,
@@ -433,7 +676,7 @@ export async function fetchPing(cfg) {
       if (isUpdateRequiredError(r.status, parsed)) {
         persistVersionBlockState(r.status, parsed);
       }
-      const fallbackMessage = data?.error?.message || `HTTP ${r.status}`;
+      const fallbackMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
       const error = buildApiError(r.status, parsed, fallbackMessage, r);
       return {
         urlOk: true,

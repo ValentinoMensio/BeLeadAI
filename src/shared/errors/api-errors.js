@@ -35,6 +35,10 @@ const MESSAGES = {
     default: "Los datos enviados son demasiado grandes.",
     PAYLOAD_TOO_LARGE: "Los datos enviados son demasiado grandes.",
   },
+  426: {
+    default: "Necesitás actualizar la extensión para continuar.",
+    CLIENT_UPDATE_REQUIRED: "Necesitás actualizar la extensión para continuar.",
+  },
   429: {
     default: "Demasiadas solicitudes. Esperá un momento antes de reintentar.",
     RATE_LIMIT_EXCEEDED: "Demasiadas solicitudes. Esperá un momento antes de reintentar.",
@@ -49,11 +53,103 @@ const MESSAGES = {
   },
 };
 
-function getRawMessage(data, _rawText) {
-  if (!data) return "";
-  const err = data.error;
-  if (err && (err.message || err.code)) return err.message || err.code;
-  return "";
+function fallbackStatusMessage(status) {
+  const s = Number(status || 0) || 0;
+  if (s === 0) return "Error de conexión.";
+  if (s >= 500) return "Error interno del servidor. Probá más tarde.";
+  if (s === 429) return "Demasiadas solicitudes. Esperá un momento antes de reintentar.";
+  if (s === 426) return "Necesitás actualizar la extensión para continuar.";
+  if (s === 401) return "API key inválida o expirada. Revisá la key en Opciones.";
+  if (s === 403) return "No tenés permiso para esta acción.";
+  return "Error de la API.";
+}
+
+function toCountOrNull(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
+function pickCount(details, keys) {
+  for (const key of keys) {
+    const val = toCountOrNull(details?.[key]);
+    if (val != null) return val;
+  }
+  return null;
+}
+
+function resolveDailyLeadCounts(details) {
+  const sent =
+    pickCount(details, [
+      "sent_today",
+      "used_today",
+      "messages_sent_today",
+      "sent_followings_today",
+      "followings_sent_today",
+      "sent_followings",
+    ]) ?? 0;
+
+  const pendingDirect = pickCount(details, [
+    "pending_followings",
+    "pending_to_send",
+    "pending_leads",
+    "followings_pending_today",
+  ]);
+
+  const extracted = pickCount(details, [
+    "extracted_followings_today",
+    "followings_extracted_today",
+    "extracted_today",
+    "lead_generated_today",
+    "matched_total",
+  ]);
+
+  const pending =
+    pendingDirect ?? (extracted != null ? Math.max(0, extracted - sent) : 0);
+
+  const toAnalyze =
+    pickCount(details, [
+      "analyze_requested",
+      "requested_to_analyze",
+      "requested_limit",
+      "requested",
+    ]) ?? 0;
+
+  return { pending, sent, toAnalyze };
+}
+
+function formatAnalyzeToSendDailyMessage(details) {
+  const { pending, sent, toAnalyze } = resolveDailyLeadCounts(details);
+  return (
+    "Cupo insuficiente. Pendientes: " +
+    pending +
+    " · Enviados: " +
+    sent +
+    " · A analizar: " +
+    toAnalyze +
+    "."
+  );
+}
+
+function formatLegacyLeadsInsufficientMessage(errMessage) {
+  const raw = String(errMessage || "").trim();
+  if (!raw) return null;
+  const requestedMatch = raw.match(/Pediste\s*(\d+)/i);
+  const usedMatch = raw.match(/Usados?\s+hoy\s*(\d+)/i);
+  const remainingMatch = raw.match(/te\s+quedan\s*(\d+)/i);
+  if (!requestedMatch && !usedMatch && !remainingMatch) return null;
+  const toAnalyze = requestedMatch ? toCountOrNull(requestedMatch[1]) ?? 0 : 0;
+  const sent = usedMatch ? toCountOrNull(usedMatch[1]) ?? 0 : 0;
+  const pending = remainingMatch ? toCountOrNull(remainingMatch[1]) ?? 0 : 0;
+  return (
+    "Cupo insuficiente. Pendientes: " +
+    pending +
+    " · Enviados: " +
+    sent +
+    " · A analizar: " +
+    toAnalyze +
+    "."
+  );
 }
 
 function formatBlockingQuotaError(data) {
@@ -78,28 +174,7 @@ function formatBlockingQuotaError(data) {
     return "No hay sender activo para esta cuenta. Iniciá el sender y reintentá.";
   }
   if (quota === "analyze_to_send_daily") {
-    let base = err.message || "Límite diario de leads para enviar alcanzado.";
-    const analyzed = details.analyzed_today != null ? details.analyzed_today : 0;
-    const followings = details.followings_limit_today != null ? details.followings_limit_today : 0;
-    const cap =
-      details.cap_analyze_today != null
-        ? details.cap_analyze_today
-        : details.cap_leads_today != null
-          ? details.cap_leads_today
-          : null;
-    if (cap != null) {
-      base +=
-        " Usado hoy: " +
-        analyzed +
-        " analizados + " +
-        followings +
-        " followings = " +
-        (analyzed + followings) +
-        " de " +
-        cap +
-        ".";
-    }
-    return base;
+    return formatAnalyzeToSendDailyMessage(details);
   }
   if (quota === "lead_generation_anti_abuse") {
     let base = err.message || "Demasiados leads generados para el nivel de envio actual.";
@@ -143,19 +218,18 @@ function formatBlockingQuotaError(data) {
 
 function formatFollowingsQuotaError(data) {
   const err = data && data.error;
-  if (!err || !err.details) return null;
-  const details = err.details;
-  if (details.requested == null && details.limit == null) return null;
-  let base = err.message || "Cuota insuficiente para más followings.";
-  const parts = [];
-  if (details.requested != null && details.limit != null) {
-    parts.push("Pediste " + details.requested + ", el límite es " + details.limit + ".");
-  }
-  if (details.used_today != null) parts.push("usados hoy: " + details.used_today);
-  if (details.pending_followings != null) parts.push("pendientes: " + details.pending_followings);
-  if (parts.length > 1) base += " " + parts[0] + " (" + parts.slice(1).join(", ") + ")";
-  else if (parts.length === 1) base += " " + parts[0];
-  return base;
+  if (!err) return null;
+  const details = err.details || {};
+  const hasCountLikeDetail =
+    details.requested != null ||
+    details.requested_limit != null ||
+    details.used_today != null ||
+    details.sent_today != null ||
+    details.pending_followings != null ||
+    details.extracted_followings_today != null ||
+    details.followings_extracted_today != null;
+  if (!hasCountLikeDetail) return formatLegacyLeadsInsufficientMessage(err.message);
+  return formatAnalyzeToSendDailyMessage(details);
 }
 
 export function formatApiErrorForUser(status, data, rawText, retryAfterSec) {
@@ -170,13 +244,10 @@ export function formatApiErrorForUser(status, data, rawText, retryAfterSec) {
   } else if (status === 400 && (message = formatFollowingsQuotaError(data))) {
     // prioritized followings quota message
   } else {
-    message =
-      (byStatus && (byStatus[code] || byStatus.default)) ||
-      getRawMessage(data, rawText) ||
-      "Error de la API.";
+    message = (byStatus && (byStatus[code] || byStatus.default)) || fallbackStatusMessage(status);
   }
 
-  if ((status === 429 || status === 503) && retryAfterSec != null && retryAfterSec > 0) {
+  if ((status === 429 || status === 503) && retryAfterSec != null && retryAfterSec > 1) {
     if (retryAfterSec >= 60) {
       message += " Reintentá en " + Math.ceil(retryAfterSec / 60) + " min.";
     } else {
