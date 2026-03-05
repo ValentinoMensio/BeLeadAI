@@ -253,7 +253,6 @@
       const data = await storageGetLocal(defaults);
       const sessionData = await getSession(sessionDefaults);
       const deviceId = String(data[AUTH_KEYS.deviceId] || "").trim();
-      const rawAccessStored = String(data[AUTH_KEYS.accessToken] || "").trim();
       const rawRefreshStored = String(data[AUTH_KEYS.refreshToken] || "").trim();
       let accessToken = String(sessionData[AUTH_SESSION_KEYS.accessToken] || "").trim();
       let accessExpiresAt = Number(sessionData[AUTH_SESSION_KEYS.accessExpiresAt] || 0) || 0;

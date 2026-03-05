@@ -66,7 +66,7 @@
         if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0")
           return false;
         return true;
-      } catch (_) {
+      } catch {
         return false;
       }
     }

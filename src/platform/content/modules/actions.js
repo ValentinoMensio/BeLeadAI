@@ -36,7 +36,7 @@
         range.collapse(false);
         sel.removeAllRanges();
         sel.addRange(range);
-      } catch (e) {
+      } catch {
         editable.focus();
       }
     }
@@ -280,7 +280,7 @@
           );
           await sleep(1800);
           return await waitForThreadOpened(3000);
-        } catch (_) {
+        } catch {
           return false;
         }
       }
@@ -291,7 +291,7 @@
         if (path.startsWith("http://") || path.startsWith("https://")) {
           try {
             path = new URL(path).pathname || "";
-          } catch (_) {
+          } catch {
             return "";
           }
         }
@@ -434,7 +434,7 @@
         if (parent && (parent.getAttribute("role") === "button" || parent.onclick != null)) {
           try {
             parent.click();
-          } catch (_) {}
+          } catch {}
         }
       }
 

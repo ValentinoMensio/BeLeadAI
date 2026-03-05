@@ -27,8 +27,7 @@ function openOptions() {
  * @returns {{ showSetup, hideSetup, updateSetupChecklist, refreshTabAccountDisplay, bindSetupEvents }}
  */
 export function initSetup(deps) {
-  const { store, ui, dom } = deps;
-  const { getState } = store;
+  const { dom } = deps;
   const { qs } = dom;
 
   function updateSetupChecklist(cfg, opts = {}) {

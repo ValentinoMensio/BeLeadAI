@@ -9,7 +9,7 @@
       const observer = new MutationObserver(() => {
         try {
           callback();
-        } catch (_) {}
+        } catch {}
       });
       observer.observe(
         target,
@@ -30,7 +30,7 @@
       return () => {
         try {
           target.removeEventListener(eventName, handler, options);
-        } catch (_) {}
+        } catch {}
       };
     }
 
@@ -82,7 +82,7 @@
           const pathname = href.startsWith("http") ? new URL(href).pathname : href;
           const u = extractIgUsernameFromPath(pathname);
           if (u) out.add(u);
-        } catch (_) {}
+        } catch {}
       }
 
       const textNodes = document.querySelectorAll(

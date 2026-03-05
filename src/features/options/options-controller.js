@@ -8,6 +8,8 @@ import { API_PATHS } from "../../config/endpoints.js";
 import { buildApiUrl } from "../../shared/utils/url.js";
 import { buildClientHeaders } from "../../shared/utils/client-metadata.js";
 import { escapeHtml } from "../../shared/utils/dom.js";
+import { logApiErrorDiagnostic } from "../../shared/errors/error-diagnostics.js";
+import { apiFetch, fetchPing as fetchPingService } from "../../services/api-client.js";
 
 // options.js (estilo popup + settings alineados)
 const $ = (sel) => document.querySelector(sel);
@@ -39,44 +41,16 @@ const viewModel = createOptionsViewModel({
 
 const setCfgStatus = viewModel.updateConfigStatus;
 const setSaveStatus = viewModel.updateSaveStatus;
+const OPTIONS_QUOTAS_REFRESH_MS = 30000;
 
 function normalizeBaseUrl(v) {
   const s = (v || "").trim();
   return s.replace(/\/+$/, ""); // sin slash final
 }
 
-function readJwtExpMs(token) {
-  const raw = String(token || "").trim();
-  if (!raw) return 0;
-  const parts = raw.split(".");
-  if (parts.length < 2) return 0;
-  try {
-    const payloadB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payloadB64 + "=".repeat((4 - (payloadB64.length % 4)) % 4);
-    const payload = JSON.parse(atob(padded));
-    const expS = Number(payload?.exp || 0);
-    return Number.isFinite(expS) && expS > 0 ? expS * 1000 : 0;
-  } catch {
-    return 0;
-  }
-}
-
 function toNumOrNull(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
-}
-
-function resolveUsedToday(messages, safetyDaily) {
-  const direct =
-    toNumOrNull(messages?.used_today) ??
-    toNumOrNull(messages?.used_day) ??
-    toNumOrNull(messages?.sent_today) ??
-    toNumOrNull(messages?.consumed_today);
-  if (direct != null) return Math.max(0, direct);
-  const remaining = toNumOrNull(messages?.remaining_today);
-  const limit = toNumOrNull(safetyDaily);
-  if (remaining != null && limit != null && limit > 0) return Math.max(0, limit - remaining);
-  return 0;
 }
 
 function resolveUsedMonth(messages, planMonth) {
@@ -132,13 +106,6 @@ function storageSessionGet(defaults) {
   return new Promise((resolve) => {
     if (!chrome.storage.session) return resolve(defaults || {});
     chrome.storage.session.get(defaults, (data) => resolve(data || defaults || {}));
-  });
-}
-
-function storageSessionSet(values) {
-  return new Promise((resolve) => {
-    if (!chrome.storage.session) return resolve();
-    chrome.storage.session.set(values, () => resolve());
   });
 }
 
@@ -217,18 +184,29 @@ function isLikelyHtmlResponse(text) {
   );
 }
 
-function summarizeHtmlResponse(status, text) {
+function summarizeHtmlResponse(status) {
   return `No se pudo conectar con la API (HTTP ${status || 0}). Revisá la URL base y probá de nuevo.`;
 }
 
+function fallbackApiErrorMessage(status) {
+  const s = Number(status || 0) || 0;
+  if (s === 401) return "API key inválida o expirada. Revisá la key en Opciones.";
+  if (s === 403) return "No tenés permiso para esta acción.";
+  if (s === 429) return "Demasiadas solicitudes. Esperá un momento antes de reintentar.";
+  if (s === 426) return "Necesitás actualizar la extensión para continuar.";
+  if (s >= 500) return "Error del servidor. Probá más tarde.";
+  if (s > 0) return `Error de la API (HTTP ${s}).`;
+  return "Error de conexión.";
+}
+
 function toUserApiError(status, data, text, retrySec = null) {
-  if (isLikelyHtmlResponse(text)) return summarizeHtmlResponse(status, text);
+  if (isLikelyHtmlResponse(text)) return summarizeHtmlResponse(status);
   if (typeof window.formatApiErrorForUser === "function") {
     const formatted = window.formatApiErrorForUser(status, data, text, retrySec);
     if (typeof formatted === "string" && !isLikelyHtmlResponse(formatted)) return formatted;
   }
-  const fallback = data?.error?.message || `HTTP ${status}`;
-  return isLikelyHtmlResponse(fallback) ? summarizeHtmlResponse(status, text) : String(fallback);
+  const fallback = fallbackApiErrorMessage(status);
+  return isLikelyHtmlResponse(fallback) ? summarizeHtmlResponse(status) : String(fallback);
 }
 
 function unwrapApiDataEnvelope(payload) {
@@ -263,7 +241,6 @@ function classifyLoginFailure(result) {
   return "unknown";
 }
 
-const PING_TIMEOUT_MS = 12000;
 const API_CONFIG_TIMEOUT_MS = 10000;
 const PROMPT_MAX_CHARS = 700;
 const SESSION_AUTH_KEYS = [];
@@ -295,7 +272,7 @@ async function persistPlanBlockState(loginResult) {
         .toUpperCase(),
       status: Number(loginResult?.status || 0) || 403,
       message: String(
-        loginResult?.error?.message || "Tu plan venció. Renovalo para seguir usando el servicio."
+        loginResult?.errorMessage || "Tu plan venció. Renovalo para seguir usando el servicio."
       ),
       details,
       plan_name: planName,
@@ -315,7 +292,7 @@ async function persistVersionBlockState(result) {
       code: "CLIENT_UPDATE_REQUIRED",
       status: Number(result?.status || 0) || 426,
       message: String(
-        result?.error?.message || "A newer version of the extension is required."
+        result?.errorMessage || "A newer version of the extension is required."
       ).trim(),
       details,
       update_url: details.updateUrl || "",
@@ -430,7 +407,7 @@ async function verifyWithPing() {
   if (failureType === "update_required") {
     await persistVersionBlockState(result);
     showVersionBlockScreen({
-      message: result?.error?.message,
+      message: result?.errorMessage,
       details: result?.error?.details,
       update_url: result?.error?.details?.updateUrl || result?.error?.details?.update_url,
     });
@@ -438,8 +415,8 @@ async function verifyWithPing() {
   }
   await clearVersionBlockState();
   hideVersionBlockScreen();
-  if (result.error?.message) {
-    setCfgStatus("err", result.error.message);
+  if (result.errorMessage) {
+    setCfgStatus("err", result.errorMessage);
     return;
   }
   if (!result.tokenOk) {
@@ -450,7 +427,9 @@ async function verifyWithPing() {
   refreshCfgStatus();
 }
 
-async function fetchPingWithHeaders(baseUrl, headers) {
+async function fetchPingWithHeaders(baseUrl, headers, options = {}) {
+  const networkOnly =
+    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
   const empty = {
     urlOk: false,
     tokenOk: false,
@@ -462,57 +441,28 @@ async function fetchPingWithHeaders(baseUrl, headers) {
     errorMessage: null,
   };
   if (!baseUrl || !headers.Authorization) return empty;
-  const url = buildApiUrl(baseUrl, API_PATHS.ping);
-  const controller = new AbortController();
-  const to = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { headers: buildClientHeaders(headers), signal: controller.signal });
-    clearTimeout(to);
-    const text = await r.text();
-    let data = {};
-    try {
-      data = JSON.parse(text);
-    } catch (_) {
-      data = {};
-    }
-    const payload = unwrapApiDataEnvelope(data);
-    if (!r.ok) {
-      const err = data?.error && typeof data.error === "object" ? data.error : {};
-      return {
-        urlOk: true,
-        tokenOk: false,
-        status: r.status,
-        accountUsername: null,
-        defaultFromAccount: null,
-        accounts: [],
-        error: {
-          code: String(err.code || "").trim() || null,
-          message: String(err.message || `HTTP ${r.status}`).trim(),
-          details: err.details && typeof err.details === "object" ? err.details : null,
-          status: r.status,
-        },
-      };
-    }
-    const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+    const ping = await fetchPingService(
+      { api_base: baseUrl },
+      { cacheMode: networkOnly ? "network-only" : "default" }
+    );
+    const accounts = Array.isArray(ping?.accounts) ? ping.accounts : [];
     const defaultFromAccount =
-      payload.default_from_account != null && String(payload.default_from_account).trim()
-        ? String(payload.default_from_account).trim().toLowerCase()
+      ping?.defaultFromAccount != null && String(ping.defaultFromAccount).trim()
+        ? String(ping.defaultFromAccount).trim().toLowerCase()
         : null;
-    const accountUsername = defaultFromAccount
-      ? defaultFromAccount
-      : accounts.length > 0
-        ? String(accounts[0]).trim().toLowerCase()
-        : null;
+    const accountUsername = ping?.accountUsername ? String(ping.accountUsername).trim() : null;
     return {
-      urlOk: true,
-      tokenOk: true,
-      status: r.status,
+      urlOk: !!ping?.urlOk,
+      tokenOk: !!ping?.tokenOk,
+      status: Number(ping?.status || 0) || 0,
       accountUsername,
       defaultFromAccount,
       accounts,
+      errorMessage: ping?.errorMessage || null,
+      error: ping?.error || null,
     };
   } catch (e) {
-    clearTimeout(to);
     const { kind, message } = classifyFetchError(e);
     return {
       ...empty,
@@ -539,7 +489,9 @@ function refreshCfgStatus() {
   return setCfgStatus("ok", "Listo");
 }
 
-async function fetchApiConfig(apiBase) {
+async function fetchApiConfig(apiBase, options = {}) {
+  const networkOnly =
+    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
   if (!apiBase) return null;
   if (!isSecureApiBase(apiBase)) return null;
   if (!(await ensureApiHostPermission(apiBase, false))) return null;
@@ -551,7 +503,11 @@ async function fetchApiConfig(apiBase) {
       ? { Authorization: authHeaders.Authorization }
       : undefined;
     const url = buildApiUrl(apiBase, API_PATHS.config);
-    const r = await fetch(url, { headers: buildClientHeaders(headers), signal: controller.signal });
+    const r = await fetch(url, {
+      headers: buildClientHeaders(headers),
+      signal: controller.signal,
+      cache: networkOnly ? "no-store" : "default",
+    });
     clearTimeout(to);
     if (!r.ok) return null;
     const raw = await r.json();
@@ -667,12 +623,14 @@ async function performJwtLogin(requestPermission = false) {
     return {
       ok: false,
       status: 0,
+      errorMessage: "Configura la API primero.",
       error: { code: "CONFIG_REQUIRED", message: "Configura la API primero." },
     };
   if (!isSecureApiBase(base))
     return {
       ok: false,
       status: 0,
+      errorMessage: "La API debe usar HTTPS.",
       error: { code: "HTTPS_REQUIRED", message: "La API debe usar HTTPS." },
     };
   const hasPermission = await ensureApiHostPermission(base, requestPermission);
@@ -680,6 +638,7 @@ async function performJwtLogin(requestPermission = false) {
     return {
       ok: false,
       status: 0,
+      errorMessage: "Falta permiso para conectar con el dominio de la API.",
       error: {
         code: "HOST_PERMISSION_REQUIRED",
         message: "Falta permiso para conectar con el dominio de la API.",
@@ -690,6 +649,7 @@ async function performJwtLogin(requestPermission = false) {
     return {
       ok: false,
       status: 0,
+      errorMessage: "Configura la API Key primero.",
       error: { code: "API_KEY_REQUIRED", message: "Configura la API Key primero." },
     };
 
@@ -703,6 +663,9 @@ async function performJwtLogin(requestPermission = false) {
       return {
         ok: false,
         status: Number(loginResp?.status || 0) || 0,
+        errorMessage:
+          String(loginResp?.errorMessage || "").trim() ||
+          "No se pudo iniciar sesión. Revisá la API Key.",
         error: loginResp?.error || {
           code: "AUTH_ERROR",
           message: "No se pudo iniciar sesión. Revisá la API Key.",
@@ -719,12 +682,13 @@ async function performJwtLogin(requestPermission = false) {
     return {
       ok: false,
       status: 0,
+      errorMessage: "Error de red o permisos.",
       error: { code: "NETWORK_ERROR", message: "Error de red o permisos." },
     };
   }
 }
 
-async function persistAuthState({ apiToken = "", loginResult = null }) {
+async function persistAuthState({ loginResult = null }) {
   const jwtExpiresAt = Number(loginResult?.jwt_expires_at || 0) || 0;
   const clientId = loginResult?.client_id != null ? String(loginResult.client_id) : "";
   await storageLocalSet({ jwt_expires_at: jwtExpiresAt });
@@ -747,14 +711,14 @@ async function clearAuthState() {
 }
 
 async function logoutSession({ allDevices = false } = {}) {
-  let remoteResult = { ok: false };
+  let remoteResult = { ok: false, errorMessage: "No se pudo cerrar sesión en el servidor." };
   try {
     remoteResult = await chrome.runtime.sendMessage({
       action: allDevices ? "auth_logout_all" : "auth_logout",
       revoke_remote: true,
     });
   } catch {
-    remoteResult = { ok: false };
+    remoteResult = { ok: false, errorMessage: "No se pudo cerrar sesión en el servidor." };
   }
 
   await clearAuthState();
@@ -803,7 +767,7 @@ async function save() {
         sessionJwtExpiresAt = Number(authState.accessExpiresAt || 0) || 0;
         setSaveStatus("Guardado");
         refreshCfgStatus();
-        fetchQuotas();
+        fetchQuotas({ cacheMode: "network-only" });
       });
       return;
     }
@@ -816,7 +780,7 @@ async function save() {
     if (failureType === "update_required") {
       await persistVersionBlockState(loginResult);
       showVersionBlockScreen({
-        message: loginResult?.error?.message,
+        message: loginResult?.errorMessage,
         details: loginResult?.error?.details,
         update_url:
           loginResult?.error?.details?.updateUrl || loginResult?.error?.details?.update_url,
@@ -860,10 +824,10 @@ async function save() {
   }
 
   chrome.storage.sync.set(syncCfg, async () => {
-    await persistAuthState({ apiToken, loginResult });
+    await persistAuthState({ loginResult });
     setSaveStatus("Guardado");
     refreshCfgStatus();
-    fetchQuotas();
+    fetchQuotas({ cacheMode: "network-only" });
   });
 }
 
@@ -889,7 +853,7 @@ async function testHealth() {
     if (failureType === "update_required") {
       await persistVersionBlockState(result);
       showVersionBlockScreen({
-        message: result?.error?.message,
+        message: result?.errorMessage,
         details: result?.error?.details,
         update_url: result?.error?.details?.updateUrl || result?.error?.details?.update_url,
       });
@@ -918,10 +882,10 @@ async function testHealth() {
     setCfgStatus("err", "Login falló");
     return;
   }
-  await persistAuthState({ apiToken: apiKey, loginResult: result });
+  await persistAuthState({ loginResult: result });
   if (resultEl) resultEl.value = "Login OK";
   setCfgStatus("ok", "OK");
-  fetchQuotas();
+  fetchQuotas({ cacheMode: "network-only" });
 }
 
 async function test() {
@@ -936,12 +900,12 @@ async function test() {
   $("#health_result").value = "Probando…";
 
   try {
-    const r = await fetch(url, { headers: buildClientHeaders() });
+    const r = await fetch(url, { headers: buildClientHeaders(), cache: "no-store" });
     const t = await r.text();
     let data;
     try {
       data = t ? JSON.parse(t) : {};
-    } catch (_) {
+    } catch {
       data = {};
     }
     if (r.ok) {
@@ -954,7 +918,7 @@ async function test() {
       if (failureType === "update_required") {
         await persistVersionBlockState({ status: r.status, error: data?.error || {} });
         showVersionBlockScreen({
-          message: data?.error?.message,
+          message: toUserApiError(r.status, data || {}, t),
           details: data?.error?.details,
           update_url: data?.error?.details?.updateUrl || data?.error?.details?.update_url,
         });
@@ -968,7 +932,9 @@ async function test() {
       setCfgStatus("warn", r.status === 429 ? "Demasiadas solicitudes" : "API responde con error");
     }
   } catch (e) {
-    console.error(e);
+    logApiErrorDiagnostic("options.test_health.network_failure", e, {
+      endpoint: API_PATHS.health,
+    });
     $("#health_result").value = "Error de red o permisos. Revisá URL y permiso del dominio API.";
     setCfgStatus("err", "Sin conexión");
   }
@@ -1037,7 +1003,9 @@ function setQuotaBar(fillEl, parentProgress, value, maxVal) {
   }
 }
 
-async function fetchQuotas() {
+async function fetchQuotas(options = {}) {
+  const networkOnly =
+    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
   const loadingEl = $("#quotas_loading");
   const contentEl = $("#quotas_content");
   const base = normalizeBaseUrl($("#api_base")?.value);
@@ -1078,15 +1046,17 @@ async function fetchQuotas() {
       tabAccount = "@" + r.username;
       fromAccount = String(r.username).trim();
     } else if (r?.error === "no_instagram_tab") tabAccount = "abrí Instagram en una pestaña";
-  } catch (_) {}
+  } catch {}
   const tabEl = $("#quotas_tab_account");
   if (tabEl) tabEl.textContent = "Cuenta en pestaña: " + tabAccount;
 
   if (!fromAccount) {
     try {
-      const ping = await fetchPingWithHeaders(base, headers);
+      const ping = await fetchPingWithHeaders(base, headers, {
+        cacheMode: networkOnly ? "network-only" : "default",
+      });
       fromAccount = (ping?.accountUsername || "").trim();
-    } catch (_) {}
+    } catch {}
   }
 
   try {
@@ -1097,44 +1067,37 @@ async function fetchQuotas() {
       if (contentEl) contentEl.style.display = "none";
       return;
     }
-    const url = buildApiUrl(base, API_PATHS.limits, { from_account: fromAccount });
-    const r = await fetch(url, { headers: buildClientHeaders(headers) });
-    const text = await r.text();
-    let data = null;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
+    const query = new URLSearchParams({ from_account: fromAccount }).toString();
+    const r = await apiFetch(base, `${API_PATHS.limits}?${query}`, {
+      cacheMode: networkOnly ? "network-only" : "default",
+    });
+    const data = r?.data || null;
     const payload = unwrapApiDataEnvelope(data);
-    if (!r.ok || !data) {
-      const failureType = classifyLoginFailure({ status: r.status, error: data?.error || {} });
+    if (!r?.ok || !data) {
+      const failureType = classifyLoginFailure({ status: r?.status || 0, error: data?.error || {} });
       if (failureType === "update_required") {
-        await persistVersionBlockState({ status: r.status, error: data?.error || {} });
+        await persistVersionBlockState({ status: r?.status || 0, error: data?.error || {} });
         showVersionBlockScreen({
-          message: data?.error?.message,
+          message: r?.errorMessage || toUserApiError(r?.status || 0, data || {}, ""),
           details: data?.error?.details,
           update_url: data?.error?.details?.updateUrl || data?.error?.details?.update_url,
         });
       }
-      const retrySec =
-        typeof window.retryAfterFromResponse === "function"
-          ? window.retryAfterFromResponse(r, data || {})
-          : null;
-      const msg = r.status
-        ? toUserApiError(r.status, data || {}, text, retrySec)
-        : "Error de red. Revisá token y API.";
+      const retrySec = Number(r?.error?.retryAfterSec || 0) || null;
+      const msg = r?.errorMessage
+        ? r.errorMessage
+        : r?.status
+          ? toUserApiError(r.status, data || {}, "", retrySec)
+          : "Error de red. Revisá token y API.";
       if (loadingEl) loadingEl.textContent = msg;
       if (contentEl) contentEl.style.display = "none";
       return;
     }
     const safety = Number(payload.limits?.safety_messages_per_day ?? 0);
     const planMonth = Number(payload.limits?.plan_messages_per_month ?? 0);
-    const usedToday = resolveUsedToday(payload.messages, safety);
     const usedMonth = resolveUsedMonth(payload.messages, planMonth);
     const safeDailyLimit = Number.isFinite(safety) ? safety : 0;
     const safeMonthlyLimit = Number.isFinite(planMonth) ? planMonth : 0;
-    const limitTodayStr = safeDailyLimit <= 0 ? "∞" : String(safeDailyLimit);
     const limitMonthStr = safeMonthlyLimit <= 0 ? "∞" : String(safeMonthlyLimit);
     const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
 
@@ -1213,7 +1176,9 @@ async function fetchQuotas() {
       }
     }
   } catch (e) {
-    console.error(e);
+    logApiErrorDiagnostic("options.fetch_quotas.network_failure", e, {
+      endpoint: API_PATHS.limits,
+    });
     if (loadingEl) loadingEl.textContent = "Error de red al cargar cuotas.";
     if (contentEl) contentEl.style.display = "none";
   }
@@ -1225,9 +1190,12 @@ document.addEventListener("DOMContentLoaded", () => {
   load();
   setTimeout(verifyWithPing, 300);
   setTimeout(fetchQuotas, 500);
-  // Actualización en tiempo real cada 15s
+  // Actualización en tiempo real cada 30s
   if (quotasRefreshInterval) clearInterval(quotasRefreshInterval);
-  quotasRefreshInterval = setInterval(fetchQuotas, 15000);
+  quotasRefreshInterval = setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    fetchQuotas();
+  }, OPTIONS_QUOTAS_REFRESH_MS);
 });
 
 $("#save").addEventListener("click", save);
@@ -1235,7 +1203,7 @@ $("#test").addEventListener("click", async () => {
   await test();
   const base = normalizeBaseUrl($("#api_base")?.value);
   if (base) {
-    const limits = await fetchApiConfig(base);
+    const limits = await fetchApiConfig(base, { cacheMode: "network-only" });
     if (limits) applyPromptLimits(limits);
   }
 });

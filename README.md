@@ -32,6 +32,8 @@ Extension de Chrome para operar flujos desde una UI simple, conectada a una API 
 
 ## Primera configuracion
 
+Para crear una cuenta y solicitar credenciales de acceso, escribe a `beleadai.contact@gmail.com` o por Instagram en `https://www.instagram.com/beleadai.contact/`.
+
 1. En `chrome://extensions`, abre `Details` de la extension.
 2. Entra en `Extension options`.
 3. Completa:
