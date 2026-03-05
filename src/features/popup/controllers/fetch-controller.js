@@ -102,7 +102,7 @@ export function initFetchTab(deps) {
     loadLastJobsService,
     loadJobSummary,
   } = services;
-  const { setStatus, renderJobsList, renderJobDetails, getLimitsData } = ui;
+  const { setStatus, renderJobsList, renderJobDetails, getLimitsData, refreshLimitsWithCache } = ui;
   const { qs } = dom;
 
   let refreshJobsListInFlight = null;
@@ -208,10 +208,30 @@ export function initFetchTab(deps) {
     if (!limits || !limits.messages) return null;
     const remToday = Number(limits.messages.remaining_today);
     const remMonth = Number(limits.messages.remaining_this_month);
-    const remHour = Number(limits.messages.remaining_hour);
-    const vals = [remToday, remMonth, remHour].filter((v) => Number.isFinite(v) && v >= 0);
+    const vals = [remToday, remMonth].filter((v) => Number.isFinite(v) && v >= 0);
     if (!vals.length) return null;
     return Math.max(0, Math.min(...vals));
+  }
+
+  function isSendQuotaBlocking(blockingQuota) {
+    const key = String(blockingQuota || "")
+      .trim()
+      .toLowerCase();
+    return [
+      "safety_daily",
+      "plan_messages_monthly",
+      "messages_remaining",
+      "followings_daily",
+    ].includes(key);
+  }
+
+  async function refreshLimitsForQuotaGate() {
+    if (typeof refreshLimitsWithCache !== "function") return;
+    try {
+      await refreshLimitsWithCache(true);
+    } catch (error) {
+      logApiErrorDiagnostic("fetch.refresh_limits_for_quota_gate.failed", error);
+    }
   }
 
   function enforceLimitInputByRemainingMessages(showMessage = false) {
@@ -570,15 +590,17 @@ export function initFetchTab(deps) {
       const remainingMsgs = getRemainingMessagesForLeads();
       if (Number.isFinite(remainingMsgs)) {
         if (remainingMsgs <= 0) {
-          return setFetchStatus(
-            "No tenés mensajes disponibles para generar nuevos leads en este momento.",
-            true
+          setFetchStatus(
+            "Advertencia: no hay cupo visible para nuevos leads. El servidor va a validar el límite final.",
+            false,
+            { force: true }
           );
         }
         if (limit > remainingMsgs) {
-          return setFetchStatus(
-            `Leads excede mensajes restantes (${remainingMsgs}). Reducí la cantidad.`,
-            true
+          setFetchStatus(
+            `Advertencia: pediste ${limit} y el cupo visible es ${remainingMsgs}. El servidor confirmará el máximo permitido.`,
+            false,
+            { force: true }
           );
         }
       }
@@ -633,12 +655,45 @@ export function initFetchTab(deps) {
   }
 
   async function doEnqueueAnalyze(cfg) {
+    await refreshLimitsForQuotaGate();
+
+    const limits = typeof getLimitsData === "function" ? getLimitsData() : null;
+    const blockingQuota = String(limits?.blocking_quota || "")
+      .trim()
+      .toLowerCase();
+    if (isSendQuotaBlocking(blockingQuota)) {
+      setFetchStatus(
+        "Advertencia: la cuota visible marca bloqueo. Se validará con el servidor al encolar.",
+        false,
+        { force: true }
+      );
+    }
+
     const raw = (qs("#usernames") && qs("#usernames").value) || "";
     const usernames = raw
       .split(/[\n,]/)
       .map((s) => s.trim().toLowerCase())
       .filter((s) => s.length > 0);
     if (usernames.length === 0) return setFetchStatus("Ingresá al menos un username.", true);
+
+    const remainingMsgs = getRemainingMessagesForLeads();
+    if (Number.isFinite(remainingMsgs)) {
+      if (remainingMsgs <= 0) {
+        setFetchStatus(
+          "Advertencia: no hay cupo visible para analizar más perfiles. El servidor validará el límite final.",
+          false,
+          { force: true }
+        );
+      }
+      if (usernames.length > remainingMsgs) {
+        setFetchStatus(
+          `Advertencia: pediste ${usernames.length} perfil(es) y el cupo visible es ${remainingMsgs}. Se validará al encolar.`,
+          false,
+          { force: true }
+        );
+      }
+    }
+
     let batchSize = parseInt((qs("#batch_size") && qs("#batch_size").value) || "25", 10);
     if (!Number.isFinite(batchSize) || batchSize <= 0) batchSize = 25;
     const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
