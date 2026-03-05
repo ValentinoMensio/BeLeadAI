@@ -106,7 +106,7 @@ function resolveDailyLeadCounts(details) {
 
   const pending = pendingDirect ?? (extracted != null ? Math.max(0, extracted - sent) : 0);
 
-  const toAnalyze =
+  const requestedToAnalyze =
     pickCount(details, [
       "analyze_requested",
       "requested_to_analyze",
@@ -114,48 +114,93 @@ function resolveDailyLeadCounts(details) {
       "requested",
     ]) ?? 0;
 
-  return { pending, sent, toAnalyze };
+  const requestedToSend =
+    pickCount(details, ["requested_to_send", "requested_send", "requested_limit", "requested"]) ??
+    0;
+
+  return { pending, sent, requestedToAnalyze, requestedToSend };
 }
 
-function formatAnalyzeToSendDailyMessage(details) {
-  const { pending, sent, toAnalyze } = resolveDailyLeadCounts(details);
+function resolveQuotaAction(details, errMessage = "", rawText = "") {
+  const blockingQuota = String(details?.blocking_quota || "")
+    .trim()
+    .toLowerCase();
+  const message = `${String(errMessage || "")} ${String(rawText || "")}`.toLowerCase();
+
+  if (
+    details?.requested_to_send != null ||
+    details?.pending_to_send != null ||
+    message.includes("encolar envío") ||
+    message.includes("encolar envio") ||
+    message.includes("send/enqueue")
+  ) {
+    return "send";
+  }
+
+  if (
+    blockingQuota === "analyze_to_send_daily" ||
+    details?.requested_to_analyze != null ||
+    details?.analyze_requested != null ||
+    message.includes("encolar followings") ||
+    message.includes("analy")
+  ) {
+    return "analyze";
+  }
+
+  return "generic";
+}
+
+function formatAnalyzeToSendDailyMessage(details, action = "generic") {
+  const { pending, sent, requestedToAnalyze, requestedToSend } = resolveDailyLeadCounts(details);
+  const requestedNow = action === "send" ? requestedToSend : requestedToAnalyze;
+  const requestedLabel =
+    action === "send" ? "A enviar" : action === "analyze" ? "A analizar" : "Solicitados ahora";
   return (
-    "Cupo insuficiente. Pendientes: " +
-    pending +
-    " · Enviados: " +
+    "Límite diario alcanzado. " +
+    "Ya enviaste " +
     sent +
-    " · A analizar: " +
-    toAnalyze +
+    " hoy. " +
+    "Pendientes: " +
+    pending +
+    " · " +
+    requestedLabel +
+    ": " +
+    requestedNow +
     "."
   );
 }
 
-function formatLegacyLeadsInsufficientMessage(errMessage) {
+function formatLegacyLeadsInsufficientMessage(errMessage, action = "generic") {
   const raw = String(errMessage || "").trim();
   if (!raw) return null;
   const requestedMatch = raw.match(/Pediste\s*(\d+)/i);
   const usedMatch = raw.match(/Usados?\s+hoy\s*(\d+)/i);
   const remainingMatch = raw.match(/te\s+quedan\s*(\d+)/i);
   if (!requestedMatch && !usedMatch && !remainingMatch) return null;
-  const toAnalyze = requestedMatch ? (toCountOrNull(requestedMatch[1]) ?? 0) : 0;
+  const requestedNow = requestedMatch ? (toCountOrNull(requestedMatch[1]) ?? 0) : 0;
   const sent = usedMatch ? (toCountOrNull(usedMatch[1]) ?? 0) : 0;
   const pending = remainingMatch ? (toCountOrNull(remainingMatch[1]) ?? 0) : 0;
+  const requestedLabel =
+    action === "send" ? "A enviar" : action === "analyze" ? "A analizar" : "Solicitados ahora";
   return (
     "Cupo insuficiente. Pendientes: " +
     pending +
     " · Enviados: " +
     sent +
-    " · A analizar: " +
-    toAnalyze +
+    " · " +
+    requestedLabel +
+    ": " +
+    requestedNow +
     "."
   );
 }
 
-function formatBlockingQuotaError(data) {
+function formatBlockingQuotaError(data, rawText = "") {
   const err = data && data.error;
   if (!err || !err.details) return null;
   const details = err.details;
   const quota = details.blocking_quota;
+  const action = resolveQuotaAction(details, err.message, rawText);
   if (!quota) return null;
   if (quota === "one_job_per_client") {
     return "Tenés una acción en curso. Esperá a que termine antes de iniciar otra.";
@@ -173,7 +218,7 @@ function formatBlockingQuotaError(data) {
     return "No hay sender activo para esta cuenta. Iniciá el sender y reintentá.";
   }
   if (quota === "analyze_to_send_daily") {
-    return formatAnalyzeToSendDailyMessage(details);
+    return formatAnalyzeToSendDailyMessage(details, action);
   }
   if (quota === "lead_generation_anti_abuse") {
     let base = err.message || "Demasiados leads generados para el nivel de envio actual.";
@@ -215,10 +260,11 @@ function formatBlockingQuotaError(data) {
   return null;
 }
 
-function formatFollowingsQuotaError(data) {
+function formatFollowingsQuotaError(data, rawText = "") {
   const err = data && data.error;
   if (!err) return null;
   const details = err.details || {};
+  const action = resolveQuotaAction(details, err.message, rawText);
   const hasCountLikeDetail =
     details.requested != null ||
     details.requested_limit != null ||
@@ -227,8 +273,8 @@ function formatFollowingsQuotaError(data) {
     details.pending_followings != null ||
     details.extracted_followings_today != null ||
     details.followings_extracted_today != null;
-  if (!hasCountLikeDetail) return formatLegacyLeadsInsufficientMessage(err.message);
-  return formatAnalyzeToSendDailyMessage(details);
+  if (!hasCountLikeDetail) return formatLegacyLeadsInsufficientMessage(err.message, action);
+  return formatAnalyzeToSendDailyMessage(details, action);
 }
 
 export function formatApiErrorForUser(status, data, rawText, retryAfterSec) {
@@ -237,10 +283,10 @@ export function formatApiErrorForUser(status, data, rawText, retryAfterSec) {
   let message;
   if (
     (status === 400 || status === 409 || status === 422) &&
-    (message = formatBlockingQuotaError(data))
+    (message = formatBlockingQuotaError(data, rawText))
   ) {
     // prioritized blocking quota message
-  } else if (status === 400 && (message = formatFollowingsQuotaError(data))) {
+  } else if (status === 400 && (message = formatFollowingsQuotaError(data, rawText))) {
     // prioritized followings quota message
   } else {
     message = (byStatus && (byStatus[code] || byStatus.default)) || fallbackStatusMessage(status);
