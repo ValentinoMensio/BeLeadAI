@@ -8,6 +8,7 @@ import {
   normalizeEntityType,
   normalizeJobStatus,
 } from "../../../shared/domain/job-contract.js";
+import { logApiErrorDiagnostic } from "../../../shared/errors/error-diagnostics.js";
 
 const DEEP_RUBROS_OPTIONS = [
   "Health_Medical",
@@ -73,7 +74,7 @@ function toCanonicalDeepRubro(v) {
   if (!raw) return "";
   return LEGACY_RUBRO_MAP[raw] || raw;
 }
-const STATUS_CHECK_INTERVAL_MS = 5000;
+const STATUS_CHECK_INTERVAL_MS = 7000;
 
 window.selectedDeepRubros = window.selectedDeepRubros || new Set();
 
@@ -107,6 +108,10 @@ export function initFetchTab(deps) {
   let refreshJobsListInFlight = null;
   let autoRefreshInFlight = false;
   let delayedProgressTimerId = null;
+  let fetchApiBackoffUntil = 0;
+  let lastRateLimitJobsLogTs = 0;
+  let lastRateLimitSummaryLogTs = 0;
+  let lastJobStatusWasRateLimited = false;
 
   function hasFetchErrorVisible() {
     const el = qs("#status");
@@ -129,6 +134,31 @@ export function initFetchTab(deps) {
     syncEl.textContent = `Ultima sincronizacion: ${new Date().toLocaleTimeString()}`;
   }
 
+  function hasFetchApiBackoff() {
+    return fetchApiBackoffUntil > Date.now();
+  }
+
+  function retryAfterFromResult(result) {
+    const retry = Number(
+      result?.error?.retryAfterSec ??
+        result?.error?.details?.retry_after ??
+        result?.error?.details?.retry_after_sec ??
+        result?.error?.details?.retryAfter
+    );
+    if (!Number.isFinite(retry) || retry <= 0) return 0;
+    return Math.ceil(retry);
+  }
+
+  function applyFetchApiBackoff(result) {
+    const status = Number(result?.status || result?.error?.status || 0) || 0;
+    if (status !== 429 && status !== 503) return 0;
+    const retryAfterSec = retryAfterFromResult(result);
+    const floorSec = status === 429 ? 5 : 3;
+    const backoffSec = Math.max(floorSec, retryAfterSec || 0);
+    fetchApiBackoffUntil = Math.max(fetchApiBackoffUntil, Date.now() + backoffSec * 1000);
+    return backoffSec;
+  }
+
   function clearDelayedProgressTimer() {
     if (!delayedProgressTimerId) return;
     clearTimeout(delayedProgressTimerId);
@@ -142,7 +172,7 @@ export function initFetchTab(deps) {
         delayedProgressTimerId = null;
         try {
           await refreshSelectedJobProgress();
-          startAutoRefresh(5000);
+          startAutoRefresh(STATUS_CHECK_INTERVAL_MS);
         } catch {
           setFetchStatus("No se pudo refrescar el estado del job.", true);
         }
@@ -205,6 +235,11 @@ export function initFetchTab(deps) {
   }
 
   async function checkJobStatus(jobId) {
+    if (hasFetchApiBackoff()) {
+      lastJobStatusWasRateLimited = true;
+      updateFetchSyncLabel();
+      return null;
+    }
     const cfg = await loadSettings();
     const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
     if (!base) {
@@ -214,6 +249,7 @@ export function initFetchTab(deps) {
     const resultId = toCanonicalResultId(jobId, "result");
     const mainSummary = await loadJobSummary(base, resultId);
     if (!mainSummary?.ok) {
+      const backoffSec = applyFetchApiBackoff(mainSummary);
       if (Number(mainSummary?.error?.status || 0) === 401) {
         setFetchStatus("Sesion expirada. Proba la conexion en Opciones.", true);
         await saveSettings({ jwt_token: "", jwt_expires_at: 0 });
@@ -224,6 +260,7 @@ export function initFetchTab(deps) {
         .trim()
         .toUpperCase();
       if (summaryStatus === 404 || summaryStatus === 422 || summaryCode === "RESULT_ID_REQUIRED") {
+        lastJobStatusWasRateLimited = false;
         setFetchStatus("No se encontro el resultado", true);
         setState({ currentJobId: null });
         stopAutoRefresh();
@@ -233,10 +270,25 @@ export function initFetchTab(deps) {
         const sel = qs("#last_jobs_select");
         if (sel) sel.value = "";
       } else {
-        setFetchStatus(mainSummary?.error?.message || "No se pudo cargar el estado", true);
+        const isRateLimited = summaryStatus === 429 || summaryStatus === 503;
+        lastJobStatusWasRateLimited = isRateLimited;
+        const now = Date.now();
+        if (!isRateLimited || now - lastRateLimitSummaryLogTs >= 12000) {
+          logApiErrorDiagnostic("fetch.check_job_status.summary_failed", mainSummary, {
+            resultId,
+            backoffSec,
+          });
+          if (isRateLimited) lastRateLimitSummaryLogTs = now;
+        }
+        if (isRateLimited) {
+          setFetchStatus("Sincronizando resultados...", false);
+        } else {
+          setFetchStatus(mainSummary?.errorMessage || "No se pudo cargar el estado", true);
+        }
       }
       return null;
     }
+    lastJobStatusWasRateLimited = false;
     const mainStats = mainSummary.data;
     if (!mainStats || typeof mainStats !== "object") {
       setFetchStatus("No se encontro el resultado", true);
@@ -327,6 +379,10 @@ export function initFetchTab(deps) {
           );
           syncAutoRefresh(stats);
         } else {
+          if (lastJobStatusWasRateLimited || hasFetchApiBackoff()) {
+            updateFetchSyncLabel();
+            return;
+          }
           const prog = document.getElementById("job_progress");
           if (prog) prog.style.display = "none";
           syncAutoRefresh(null);
@@ -354,6 +410,10 @@ export function initFetchTab(deps) {
       renderJobDetails(null, stats, jobKind);
       syncAutoRefresh(stats);
     } else {
+      if (lastJobStatusWasRateLimited || hasFetchApiBackoff()) {
+        updateFetchSyncLabel();
+        return;
+      }
       const prog = document.getElementById("job_progress");
       if (prog) prog.style.display = "none";
       syncAutoRefresh(null);
@@ -412,6 +472,10 @@ export function initFetchTab(deps) {
   }
 
   async function refreshJobsList(limit = 5) {
+    if (hasFetchApiBackoff()) {
+      updateFetchSyncLabel();
+      return null;
+    }
     if (refreshJobsListInFlight) return refreshJobsListInFlight;
     refreshJobsListInFlight = (async () => {
       try {
@@ -420,7 +484,19 @@ export function initFetchTab(deps) {
         if (!base) return;
         const result = await loadLastJobsService(base, limit);
         if (!result?.ok) {
-          setFetchStatus(result?.error?.message || "No se pudieron cargar los resultados", true);
+          const backoffSec = applyFetchApiBackoff(result);
+          const status = Number(result?.status || result?.error?.status || 0) || 0;
+          const isRateLimited = status === 429 || status === 503;
+          const now = Date.now();
+          if (!isRateLimited || now - lastRateLimitJobsLogTs >= 12000) {
+            logApiErrorDiagnostic("fetch.refresh_jobs_list.failed", result, { limit, backoffSec });
+            if (isRateLimited) lastRateLimitJobsLogTs = now;
+          }
+          if (isRateLimited) {
+            setFetchStatus("Sincronizando resultados...", false);
+          } else {
+            setFetchStatus(result?.errorMessage || "No se pudieron cargar los resultados", true);
+          }
           return;
         }
         const { extractJobs, savedJobId } = result.data;
@@ -435,8 +511,8 @@ export function initFetchTab(deps) {
         renderJobsList(sel, extractJobs, {
           selectedJobId: preferredJobId,
         });
-        if (!sel.value && preferredJobId) {
-          ensureSelectedJobOption(sel, preferredJobId);
+        if (!sel.value && runningJobId) {
+          ensureSelectedJobOption(sel, runningJobId, "result");
         }
         if (sel.value) {
           setState({ currentJobId: sel.value });
@@ -445,6 +521,10 @@ export function initFetchTab(deps) {
             renderJobDetails(null, stats, sel.selectedOptions?.[0]?.dataset?.kind || "");
             syncAutoRefresh(stats);
           } else {
+            if (lastJobStatusWasRateLimited || hasFetchApiBackoff()) {
+              updateFetchSyncLabel();
+              return;
+            }
             const prog = document.getElementById("job_progress");
             if (prog) prog.style.display = "none";
             syncAutoRefresh(null);
@@ -531,7 +611,11 @@ export function initFetchTab(deps) {
       });
       setFetchStatus("Encolando job...", false, { force: true });
       if (!result.ok) {
-        return setFetchStatus(result?.error?.message || "Error", true);
+        logApiErrorDiagnostic("fetch.enqueue_followings.failed", result, {
+          target: target.trim().toLowerCase(),
+          limit,
+        });
+        return setFetchStatus(result?.errorMessage || "Error", true);
       }
       const payload =
         result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
@@ -564,7 +648,11 @@ export function initFetchTab(deps) {
     });
     setFetchStatus("Encolando job...", false, { force: true });
     if (!result.ok) {
-      return setFetchStatus(result?.error?.message || "Error", true);
+      logApiErrorDiagnostic("fetch.enqueue_analyze.failed", result, {
+        usernamesCount: usernames.length,
+        batchSize,
+      });
+      return setFetchStatus(result?.errorMessage || "Error", true);
     }
     const payload =
       result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
@@ -750,6 +838,10 @@ export function initFetchTab(deps) {
           renderJobDetails(null, stats, kind);
           syncAutoRefresh(stats);
         } else {
+          if (lastJobStatusWasRateLimited || hasFetchApiBackoff()) {
+            updateFetchSyncLabel();
+            return;
+          }
           const prog = document.getElementById("job_progress");
           if (prog) prog.style.display = "none";
           syncAutoRefresh(null);

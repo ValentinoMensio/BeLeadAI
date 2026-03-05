@@ -22,6 +22,8 @@
 
     let onSendTasksReceived = null;
     let getLoggedInUsernameFn = null;
+    const wsTicketRateLimitedUntilByPath = new Map();
+    const lastWsTicketRateLimitLogTsByPath = new Map();
 
     const WS_TASKS_BUFFER_KEY = "ws_pending_tasks_buffer";
     const WS_TASKS_BUFFER_MAX = 10;
@@ -39,6 +41,32 @@
       } finally {
         clearTimeout(timeoutId);
       }
+    }
+
+    function parseRetryAfterMs(response) {
+      const headerVal = Number(response?.headers?.get?.("retry-after") || 0);
+      if (!Number.isFinite(headerVal) || headerVal <= 0) return 0;
+      return Math.max(1000, Math.round(headerVal * 1000));
+    }
+
+    function getTicketRateLimitWaitMs(path) {
+      const key = String(path || "").trim() || "ticket";
+      const until = Number(wsTicketRateLimitedUntilByPath.get(key) || 0) || 0;
+      const now = Date.now();
+      if (until <= now) {
+        wsTicketRateLimitedUntilByPath.delete(key);
+        return 0;
+      }
+      return until - now;
+    }
+
+    function applyTicketRateLimit(path, retryAfterMs = 0) {
+      const key = String(path || "").trim() || "ticket";
+      const waitMs = Math.max(4000, Number(retryAfterMs || 0));
+      const until = Date.now() + waitMs;
+      const current = Number(wsTicketRateLimitedUntilByPath.get(key) || 0) || 0;
+      wsTicketRateLimitedUntilByPath.set(key, Math.max(current, until));
+      return waitMs;
     }
 
     function buildApiUrl(baseUrl, apiPath) {
@@ -125,6 +153,10 @@
     async function requestWsTicket(cfg, path, payload) {
       const base = (cfg?.api_base || "").trim().replace(/\/$/, "");
       if (!base || !authModule.isSecureApiBase(base)) return null;
+      const rateLimitWaitMs = getTicketRateLimitWaitMs(path);
+      if (rateLimitWaitMs > 0) {
+        return null;
+      }
       const headers = await authModule.getAuthHeaders(cfg);
       if (!headers.Authorization) return null;
       try {
@@ -133,11 +165,24 @@
           headers,
           body: JSON.stringify(payload || {}),
         });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+          if (resp.status === 429 || resp.status === 503) {
+            const waitMs = applyTicketRateLimit(path, parseRetryAfterMs(resp));
+            const key = String(path || "").trim() || "ticket";
+            const now = Date.now();
+            const lastLogTs = Number(lastWsTicketRateLimitLogTsByPath.get(key) || 0) || 0;
+            if (now - lastLogTs >= 15000) {
+              console.warn("[BG] ws ticket rate-limited:", key, "retry in", waitMs, "ms");
+              lastWsTicketRateLimitLogTsByPath.set(key, now);
+            }
+          }
+          return null;
+        }
         const raw = await resp.json();
         const data =
           raw?.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : raw;
         const ticket = String(data?.ws_ticket || data?.ticket || "").trim();
+        wsTicketRateLimitedUntilByPath.delete(String(path || "").trim() || "ticket");
         return ticket || null;
       } catch {
         return null;
@@ -247,7 +292,7 @@
       if (sendWs) {
         try {
           sendWs.close(1000);
-        } catch (_) {}
+        } catch {}
         sendWs = null;
       }
       wsConnected = false;
@@ -331,7 +376,7 @@
               chrome.runtime
                 .sendMessage({ type: event.type, payload: event.payload, event_id: event.eventId })
                 .catch(() => {});
-            } catch (_) {}
+            } catch {}
           };
           jobsWs.onclose = (ev) => {
             jobsWs = null;
@@ -389,7 +434,7 @@
       if (jobsWs) {
         try {
           jobsWs.close(1000);
-        } catch (_) {}
+        } catch {}
         jobsWs = null;
       }
     }

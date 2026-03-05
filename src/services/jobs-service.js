@@ -2,7 +2,6 @@
  * Servicio de jobs/flows: carga lista, resumen y destinatarios. Solo datos, no DOM.
  */
 
-import { getAuthHeaders } from "./api-client.js";
 import { apiFetch } from "./api-client.js";
 import { API_PATHS } from "../config/endpoints.js";
 import {
@@ -29,7 +28,7 @@ function buildServiceError(
     String(result?.error?.code || fallbackCode)
       .trim()
       .toUpperCase() || fallbackCode;
-  const message = String(result?.error?.message || fallbackMessage).trim() || fallbackMessage;
+  const message = String(result?.errorMessage || fallbackMessage).trim() || fallbackMessage;
   return {
     code,
     message,
@@ -38,6 +37,18 @@ function buildServiceError(
     traceId: result?.error?.traceId || null,
     retryAfterSec: Number(result?.error?.retryAfterSec || 0) || null,
   };
+}
+
+function shouldAttemptLegacyResultsFallback(result) {
+  const status = Number(result?.status || result?.error?.status || 0) || 0;
+  if (status === 404 || status === 410 || status === 501) return true;
+  const code = String(result?.error?.code || "")
+    .trim()
+    .toUpperCase();
+  if (code === "ROUTE_NOT_FOUND" || code === "NOT_FOUND" || code === "ENDPOINT_NOT_AVAILABLE") {
+    return true;
+  }
+  return false;
 }
 
 function normalizeEntityId(value) {
@@ -163,6 +174,26 @@ function mergeRecipientSources(sources, jobsIndex = null) {
   );
 }
 
+function toCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function hasSuccessfulProgress(source) {
+  const matched = toCount(source?.matched_total ?? source?.matchedTotal);
+  const okCount = toCount(source?.ok ?? source?.ok_count ?? source?.okCount);
+  const sentCount = toCount(source?.sent ?? source?.sent_count ?? source?.sentCount);
+  return matched > 0 || okCount > 0 || sentCount > 0;
+}
+
+function shouldShowAnalyzeResult(source) {
+  const status = normalizeJobStatus(source?.status || "");
+  if (!status) return false;
+  if (status === "pending" || status === "running" || status === "completed") return true;
+  if (status === "failed" || status === "canceled") return hasSuccessfulProgress(source);
+  return true;
+}
+
 function isSecureApiBase(baseUrl) {
   try {
     return new URL((baseUrl || "").trim()).protocol === "https:";
@@ -177,11 +208,13 @@ function isSecureApiBase(baseUrl) {
  */
 export async function loadLastJobs(baseUrl, limit = 5) {
   if (!isSecureApiBase(baseUrl)) {
+    const message = "La API debe usar HTTPS.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "HTTPS_REQUIRED",
-        message: "La API debe usar HTTPS.",
+        message,
         status: 0,
       },
     };
@@ -212,14 +245,29 @@ export async function loadLastJobs(baseUrl, limit = 5) {
         rounds_done: Number(r?.meta?.rounds_done || 0) || 0,
         stop_reason: r?.meta?.stop_reason || null,
       }))
-      .filter((r) => !!r.id);
+      .filter((r) => !!r.id)
+      .filter((r) => shouldShowAnalyzeResult(r));
     const saved = await new Promise((r) =>
       chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (d) =>
         r(d.last_flow_id || d.last_job_id)
       )
     );
-    const savedId = toCanonicalResultId(saved, "result");
+    const savedRawId = toCanonicalResultId(saved, "result");
+    const savedId = extractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
     return { ok: true, data: { extractJobs, savedJobId: savedId } };
+  }
+
+  if (!shouldAttemptLegacyResultsFallback(resultsResp)) {
+    const error = buildServiceError(
+      resultsResp,
+      "RESULTS_LIST_FAILED",
+      "No se pudieron cargar los resultados recientes."
+    );
+    return {
+      ok: false,
+      errorMessage: error.message,
+      error,
+    };
   }
 
   const flowResult = await apiFetch(baseUrl, `${API_PATHS.flows}?limit=${Math.max(limit, 5)}`);
@@ -265,7 +313,7 @@ export async function loadLastJobs(baseUrl, limit = 5) {
       }));
 
     const extractJobs = mergeRecipientSources(
-      [...flowJobs, ...standaloneAnalyzeJobs],
+      [...flowJobs, ...standaloneAnalyzeJobs].filter((j) => shouldShowAnalyzeResult(j)),
       jobsIndex
     ).slice(0, limit);
 
@@ -274,14 +322,17 @@ export async function loadLastJobs(baseUrl, limit = 5) {
         r(d.last_flow_id || d.last_job_id)
       )
     );
-    const savedId = toCanonicalResultId(saved, "result");
+    const savedRawId = toCanonicalResultId(saved, "result");
+    const savedId = extractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
     return { ok: true, data: { extractJobs, savedJobId: savedId } };
   }
 
   if (!jobsResult.ok) {
+    const error = buildServiceError(jobsResult, "JOBS_LIST_FAILED", "No se pudieron cargar los jobs.");
     return {
       ok: false,
-      error: buildServiceError(jobsResult, "JOBS_LIST_FAILED", "No se pudieron cargar los jobs."),
+      errorMessage: error.message,
+      error,
     };
   }
   const sortedJobs = (allJobs || []).slice().sort((a, b) => {
@@ -320,12 +371,15 @@ export async function loadLastJobs(baseUrl, limit = 5) {
     if (fetchIds.has(baseId)) continue;
     extractJobs.push(normalizedAnalyze);
   }
-  const dedupedExtractJobs = mergeRecipientSources(extractJobs, jobsIndex);
+  const dedupedExtractJobs = mergeRecipientSources(extractJobs, jobsIndex).filter((j) =>
+    shouldShowAnalyzeResult(j)
+  );
 
   const saved = await new Promise((r) =>
     chrome.storage.local.get({ last_job_id: null }, (d) => r(d.last_job_id))
   );
-  const savedId = toCanonicalResultId(saved, "result");
+  const savedRawId = toCanonicalResultId(saved, "result");
+  const savedId = dedupedExtractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
   return { ok: true, data: { extractJobs: dedupedExtractJobs, savedJobId: savedId } };
 }
 
@@ -334,11 +388,13 @@ export async function loadLastJobs(baseUrl, limit = 5) {
  */
 export async function loadJobSummary(baseUrl, jobOrFlowId) {
   if (!isSecureApiBase(baseUrl)) {
+    const message = "La API debe usar HTTPS.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "HTTPS_REQUIRED",
-        message: "La API debe usar HTTPS.",
+        message,
         status: 0,
       },
     };
@@ -346,33 +402,39 @@ export async function loadJobSummary(baseUrl, jobOrFlowId) {
   const rawId = String(jobOrFlowId || "").trim();
   const resultId = toCanonicalResultId(rawId, "result");
   if (!resultId) {
+    const message = "Falta result_id para consultar el resumen.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "RESULT_ID_REQUIRED",
-        message: "Falta result_id para consultar el resumen.",
+        message,
         status: 404,
       },
     };
   }
   const result = await apiFetch(baseUrl, API_PATHS.resultSummary(resultId));
   if (!result.ok) {
+    const error = buildServiceError(
+      result,
+      "RESULT_SUMMARY_FAILED",
+      "No se pudo cargar el resumen del resultado."
+    );
     return {
       ok: false,
-      error: buildServiceError(
-        result,
-        "RESULT_SUMMARY_FAILED",
-        "No se pudo cargar el resumen del resultado."
-      ),
+      errorMessage: error.message,
+      error,
     };
   }
   const summary = unwrapApiData(result.data);
   if (!summary || typeof summary !== "object") {
+    const message = "El resumen no cumple el contrato esperado.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "INVALID_RESPONSE_SCHEMA",
-        message: "El resumen no cumple el contrato esperado.",
+        message,
         status: 500,
       },
     };
@@ -398,23 +460,27 @@ export async function loadJobSummary(baseUrl, jobOrFlowId) {
  */
 export async function cancelJob(baseUrl, jobId) {
   if (!isSecureApiBase(baseUrl)) {
+    const message = "La API debe usar HTTPS.";
     return {
       ok: false,
       status: 0,
+      errorMessage: message,
       error: {
         code: "HTTPS_REQUIRED",
-        message: "La API debe usar HTTPS.",
+        message,
       },
     };
   }
   const id = toCanonicalJobId(jobId, "job");
   if (!id) {
+    const message = "job_id inválido";
     return {
       ok: false,
       status: 400,
+      errorMessage: message,
       error: {
         code: "JOB_ID_REQUIRED",
-        message: "job_id inválido",
+        message,
       },
     };
   }
@@ -424,10 +490,12 @@ export async function cancelJob(baseUrl, jobId) {
     headers: { "Content-Type": "application/json" },
   });
   if (!result.ok) {
+    const error = buildServiceError(result, "JOB_CANCEL_FAILED", "No se pudo cancelar el job.");
     return {
       ok: false,
       status: result.status,
-      error: buildServiceError(result, "JOB_CANCEL_FAILED", "No se pudo cancelar el job."),
+      errorMessage: error.message,
+      error,
     };
   }
   return { ok: true, data: result.data, status: result.status };
@@ -439,34 +507,26 @@ export async function cancelJob(baseUrl, jobId) {
 export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
   const base = (baseUrl || "").trim().replace(/\/$/, "");
   if (!base) {
+    const message = "Configurá la conexión en Opciones.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "API_BASE_REQUIRED",
-        message: "Configurá la conexión en Opciones.",
+        message,
         status: 0,
       },
     };
   }
   if (!isSecureApiBase(base)) {
+    const message = "La API debe usar HTTPS.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "HTTPS_REQUIRED",
-        message: "La API debe usar HTTPS.",
+        message,
         status: 0,
-      },
-    };
-  }
-
-  const headers = await getAuthHeaders();
-  if (!headers.Authorization) {
-    return {
-      ok: false,
-      error: {
-        code: "AUTH_REQUIRED",
-        message: "Falta autenticación. Probá la conexión en Opciones.",
-        status: 401,
       },
     };
   }
@@ -479,9 +539,14 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
   try {
     const result = await apiFetch(base, path);
     if (!result.ok) {
+      const error = buildServiceError(result, "RECIPIENT_SOURCES_FAILED", "Error al cargar resultados.");
+      if (error.status === 401 && String(error.code || "") === "AUTH_REQUIRED") {
+        error.message = "Falta autenticación. Probá la conexión en Opciones.";
+      }
       return {
         ok: false,
-        error: buildServiceError(result, "RECIPIENT_SOURCES_FAILED", "Error al cargar resultados."),
+        errorMessage: error.message,
+        error,
       };
     }
 
@@ -535,11 +600,13 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
       },
     };
   } catch {
+    const message = "Error de red al cargar resultados.";
     return {
       ok: false,
+      errorMessage: message,
       error: {
         code: "NETWORK_ERROR",
-        message: "Error de red al cargar resultados.",
+        message,
         status: 0,
       },
     };

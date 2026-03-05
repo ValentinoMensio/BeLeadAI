@@ -3,9 +3,8 @@
  */
 
 import { loadSettings } from "../../../services/settings-service.js";
-import { getAuthHeaders, classifyFetchError, fetchPing } from "../../../services/api-client.js";
+import { apiFetch, fetchPing } from "../../../services/api-client.js";
 import { API_PATHS } from "../../../config/endpoints.js";
-import { buildApiUrl } from "../../../shared/utils/url.js";
 import {
   isUnlimited,
   limitClass,
@@ -21,11 +20,9 @@ const LIMITS_DEBOUNCE_MS = 12 * 1000;
 
 let limitsData = null;
 let limitsLastFetchTime = 0;
-let limitsLastUpdateTs = null;
-let limitsLastFetchError = false;
-let limitsLastAuth401 = false;
-let limitsAbortController = null;
 let currentFromAccount = null;
+let limitsBackoffUntilMs = 0;
+let limitsBackoffStatus = 0;
 
 function unwrapApiDataEnvelope(payload) {
   if (!payload || typeof payload !== "object") return {};
@@ -84,8 +81,22 @@ function setLimitsCache(data) {
 }
 
 async function fetchLimits(signal = null) {
+  void signal;
   const cfg = await loadSettings();
   if (!cfg.api_base) return { data: null, status: 0 };
+  if (Date.now() < limitsBackoffUntilMs) {
+    const remainingSec = Math.max(1, Math.ceil((limitsBackoffUntilMs - Date.now()) / 1000));
+    const status = limitsBackoffStatus || 429;
+    const baseMsg =
+      status === 503
+        ? "Servicio no disponible. Probá en unos minutos."
+        : "Demasiadas solicitudes. Esperá un momento antes de reintentar.";
+    return {
+      data: null,
+      status,
+      errorMessage: `${baseMsg} Reintentá en ${remainingSec}s.`,
+    };
+  }
   try {
     if (new URL(cfg.api_base).protocol !== "https:") {
       return { data: null, status: 0, errorMessage: "La API debe usar HTTPS." };
@@ -93,22 +104,18 @@ async function fetchLimits(signal = null) {
   } catch {
     return { data: null, status: 0, errorMessage: "URL base inválida." };
   }
-  const headers = await getAuthHeaders();
-  if (limitsAbortController) limitsAbortController.abort();
-  limitsAbortController = new AbortController();
-  const ac = signal || limitsAbortController.signal;
   try {
     let fromAccount = "";
     try {
       const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
       fromAccount = ((r?.user_id != null ? String(r.user_id) : "") || r?.username || "").trim();
-    } catch (_) {}
+    } catch {}
 
     if (!fromAccount) {
       try {
         const ping = await fetchPing(cfg);
         fromAccount = (ping?.accountUsername || "").trim();
-      } catch (_) {}
+      } catch {}
     }
 
     if (!fromAccount) {
@@ -122,19 +129,40 @@ async function fetchLimits(signal = null) {
 
     currentFromAccount = fromAccount;
 
-    const url = buildApiUrl(cfg.api_base, API_PATHS.limits, { from_account: fromAccount });
-    const resp = await fetch(url, { headers, signal: ac });
-    if (!resp.ok) return { data: null, status: resp.status };
-    const raw = await resp.json();
-    const data = unwrapApiDataEnvelope(raw);
+    const query = new URLSearchParams({ from_account: fromAccount }).toString();
+    const result = await apiFetch(cfg.api_base, `${API_PATHS.limits}?${query}`);
+    if (!result?.ok) {
+      const status = Number(result?.status || result?.error?.status || 0) || 0;
+      if (status === 429 || status === 503) {
+        const retryAfter = Number(
+          result?.error?.retryAfterSec ??
+            result?.error?.details?.retry_after ??
+            result?.error?.details?.retry_after_sec ??
+            0
+        );
+        const floorSec = status === 429 ? 8 : 4;
+        const backoffSec =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.max(floorSec, Math.ceil(retryAfter))
+            : floorSec;
+        limitsBackoffUntilMs = Math.max(limitsBackoffUntilMs, Date.now() + backoffSec * 1000);
+        limitsBackoffStatus = status;
+      }
+      return {
+        data: null,
+        status,
+        errorMessage: result?.errorMessage || null,
+      };
+    }
+    const data = unwrapApiDataEnvelope(result.data);
     limitsData = data;
     setLimitsCache(data);
+    limitsBackoffUntilMs = 0;
+    limitsBackoffStatus = 0;
     limitsLastFetchTime = Date.now();
-    return { data, status: resp.status };
-  } catch (e) {
-    if (e.name === "AbortError") return { data: null, status: 0 };
-    const { message } = classifyFetchError(e);
-    return { data: null, status: 0, errorMessage: message };
+    return { data, status: Number(result.status || 200) || 200 };
+  } catch {
+    return { data: null, status: 0, errorMessage: "Error de red. Verificá URL o conectividad." };
   }
 }
 
@@ -142,13 +170,9 @@ function renderLimitsSummary(data, options = {}) {
   const {
     fromCache = false,
     fetchError = false,
-    updateTs = null,
     auth401 = false,
     errorMessage: networkErrorMessage = null,
   } = options;
-  if (updateTs != null) limitsLastUpdateTs = updateTs;
-  limitsLastFetchError = !!fetchError;
-  limitsLastAuth401 = !!auth401;
 
   const widgetEl = document.getElementById("limits-widget");
   const summaryEl = document.getElementById("limits-summary");

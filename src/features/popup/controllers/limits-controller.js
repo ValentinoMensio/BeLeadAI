@@ -2,7 +2,7 @@
  * Controlador de límites: refresh/cache/render vía limits_ui, eventos (filas, dry_run, intervalo).
  */
 
-const LIMITS_REFRESH_INTERVAL_MS = 15000;
+const LIMITS_REFRESH_INTERVAL_MS = 30000;
 
 /**
  * @param {{ store, services, ui, dom }} deps
@@ -47,10 +47,10 @@ export function initLimits(deps) {
       dryRunEl.addEventListener("change", onDryRunChange);
     }
 
-    limitsRefreshIntervalId = setInterval(
-      () => refreshLimitsWithCache(false),
-      LIMITS_REFRESH_INTERVAL_MS
-    );
+    limitsRefreshIntervalId = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      refreshLimitsWithCache(false);
+    }, LIMITS_REFRESH_INTERVAL_MS);
 
     function cleanup() {
       if (rowDay) rowDay.removeEventListener("click", onDayClick);

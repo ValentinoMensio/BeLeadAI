@@ -124,9 +124,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       console.warn("[BG] Poll alarm flushPendingReports failed:", e?.message || e);
     });
     jobsModule.triggerProcessNextTaskThrottled("alarm");
-    jobNotifierModule.triggerSync("poll_alarm").catch((e) => {
-      console.warn("[BG] Poll alarm notifier sync failed:", e?.message || e);
-    });
+    if (!state.isRunning) {
+      jobNotifierModule.triggerSync("poll_alarm").catch((e) => {
+        console.warn("[BG] Poll alarm notifier sync failed:", e?.message || e);
+      });
+    }
   }
   if (alarm.name === state.heartbeatAlarmName) {
     jobsModule.sendAutonomousHeartbeat().catch((e) => {
@@ -135,9 +137,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     jobsModule.flushPendingReports().catch((e) => {
       console.warn("[BG] Autonomous flushPendingReports failed:", e?.message || e);
     });
-    jobNotifierModule.triggerSync("heartbeat_alarm").catch((e) => {
-      console.warn("[BG] Heartbeat notifier sync failed:", e?.message || e);
-    });
+    if (!state.isRunning) {
+      jobNotifierModule.triggerSync("heartbeat_alarm").catch((e) => {
+        console.warn("[BG] Heartbeat notifier sync failed:", e?.message || e);
+      });
+    }
   }
   if (alarm.name === state.watchdogAlarmName) {
     jobsModule.runWatchdog().catch((e) => {

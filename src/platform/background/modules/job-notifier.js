@@ -15,6 +15,8 @@
     let syncInFlight = null;
     let lastSyncTs = 0;
     let bootstrapDone = false;
+    let rateLimitedUntilMs = 0;
+    let lastRateLimitLogTs = 0;
 
     function normalizeStatus(status) {
       const raw = String(status || "")
@@ -113,6 +115,18 @@
       return url.toString();
     }
 
+    function parseRetryAfterMs(response) {
+      const headerVal = Number(response?.headers?.get?.("retry-after") || 0);
+      if (!Number.isFinite(headerVal) || headerVal <= 0) return 0;
+      return Math.max(1000, Math.round(headerVal * 1000));
+    }
+
+    function applyRateLimitBackoff(retryAfterMs = 0) {
+      const waitMs = Math.max(minSyncGapMs, Number(retryAfterMs || 0), 4000);
+      rateLimitedUntilMs = Math.max(rateLimitedUntilMs, Date.now() + waitMs);
+      return waitMs;
+    }
+
     async function loadNotifyState() {
       if (notifyStateCache) return notifyStateCache;
       const data = await storageModule.storageGetLocal({ [NOTIFY_STATE_KEY]: null });
@@ -146,7 +160,17 @@
           headers,
           signal: controller.signal,
         });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+          if (resp.status === 429 || resp.status === 503) {
+            const waitMs = applyRateLimitBackoff(parseRetryAfterMs(resp));
+            const now = Date.now();
+            if (now - lastRateLimitLogTs >= 15000) {
+              console.warn("[BG] notifier sync rate-limited; retry in", waitMs, "ms");
+              lastRateLimitLogTs = now;
+            }
+          }
+          return null;
+        }
         const raw = await resp.json();
         if (raw?.data && typeof raw.data === "object" && !Array.isArray(raw.data)) return raw.data;
         return raw;
@@ -257,6 +281,9 @@
 
     async function runSync({ silent = false, force = false } = {}) {
       const now = Date.now();
+      if (!force && now < rateLimitedUntilMs) {
+        return { ok: true, skipped: "rate_limited" };
+      }
       if (!force && now - lastSyncTs < minSyncGapMs) {
         return { ok: true, skipped: "throttled" };
       }
@@ -281,6 +308,7 @@
       }
 
       await saveNotifyState(current);
+      rateLimitedUntilMs = 0;
       lastSyncTs = now;
       bootstrapDone = true;
       return { ok: true };

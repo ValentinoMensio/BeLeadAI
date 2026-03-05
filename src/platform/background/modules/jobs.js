@@ -32,6 +32,14 @@
     let lastKnownFromAccountTs = 0;
     let transientFailureCount = 0;
     let definitiveFailureCount = 0;
+    let pullRateLimitedUntilMs = 0;
+    let reportRateLimitedUntilMs = 0;
+    let heartbeatRateLimitedUntilMs = 0;
+    let lastHeartbeatRateLimitLogTs = 0;
+    let lastProgressLogTs = 0;
+    let lastLoggedProgressStage = "";
+    let lastPersistedProgressTs = 0;
+    let lastPersistedProgressStage = "";
 
     // Watchdog state
     let lastProgressTs = 0;
@@ -48,6 +56,16 @@
     const EMPTY_PULL_RETRY_BASE_MS = 1500;
     const THREAD_IDENTITY_CONSECUTIVE_STOP_THRESHOLD = 3;
     const ACCOUNT_FALLBACK_LIVENESS_GRACE_MS = 120000;
+    const PROGRESS_PERSIST_MIN_GAP_MS = 4000;
+    const PROGRESS_LOG_MIN_GAP_MS = 8000;
+    const CRITICAL_PROGRESS_STAGES = new Set([
+      "started",
+      "task_claimed",
+      "result_reported",
+      "flush_ok",
+      "idle",
+      "recovery",
+    ]);
 
     async function fetchWithTimeout(url, options = {}, timeoutMs = NETWORK_FETCH_TIMEOUT_MS) {
       const controller = new AbortController();
@@ -78,9 +96,21 @@
     }
 
     function updateProgress(stage) {
-      lastProgressTs = Date.now();
+      const now = Date.now();
+      lastProgressTs = now;
       progressStage = stage;
-      console.log(`[BG] Progress: ${stage}`);
+      if (stage !== lastLoggedProgressStage || now - lastProgressLogTs >= PROGRESS_LOG_MIN_GAP_MS) {
+        console.log(`[BG] Progress: ${stage}`);
+        lastLoggedProgressStage = stage;
+        lastProgressLogTs = now;
+      }
+      const shouldPersist =
+        CRITICAL_PROGRESS_STAGES.has(stage) ||
+        stage !== lastPersistedProgressStage ||
+        now - lastPersistedProgressTs >= PROGRESS_PERSIST_MIN_GAP_MS;
+      if (!shouldPersist) return;
+      lastPersistedProgressStage = stage;
+      lastPersistedProgressTs = now;
       storageModule
         .saveState({
           dm_last_progress_ts: lastProgressTs,
@@ -210,6 +240,34 @@
       return payload;
     }
 
+    function parseRetryAfterMs(response, payload = null) {
+      const headerVal = Number(response?.headers?.get?.("retry-after") || 0);
+      const payloadVal = Number(
+        payload?.error?.details?.retry_after ?? payload?.error?.details?.retry_after_sec ?? 0
+      );
+      const parsed = Number.isFinite(payloadVal) && payloadVal > 0 ? payloadVal : headerVal;
+      if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+      return Math.max(1000, Math.round(parsed * 1000));
+    }
+
+    function applyRateLimitWindow(kind, retryAfterMs) {
+      const floor = kind === "report" ? 4000 : 3000;
+      const waitMs = Math.max(floor, Number(retryAfterMs || 0));
+      const until = Date.now() + waitMs;
+      if (kind === "report") {
+        reportRateLimitedUntilMs = Math.max(reportRateLimitedUntilMs, until);
+      } else {
+        pullRateLimitedUntilMs = Math.max(pullRateLimitedUntilMs, until);
+      }
+      return waitMs;
+    }
+
+    function applyHeartbeatRateLimitWindow(retryAfterMs) {
+      const waitMs = Math.max(5000, Number(retryAfterMs || 0));
+      heartbeatRateLimitedUntilMs = Math.max(heartbeatRateLimitedUntilMs, Date.now() + waitMs);
+      return waitMs;
+    }
+
     async function recordFailureMetric(errorCode) {
       const failureClass = classifyFailure(errorCode);
       if (failureClass === "definitive") {
@@ -307,6 +365,12 @@
     }
 
     async function pullTask() {
+      if (Date.now() < pullRateLimitedUntilMs) {
+        return {
+          status: "rate_limited",
+          retryAfterMs: Math.max(1000, pullRateLimitedUntilMs - Date.now()),
+        };
+      }
       const cfg = await authModule.loadSettings();
       if (!cfg.api_base || !authModule.isSecureApiBase(cfg.api_base)) {
         console.log("[BG] No hay API base configurada");
@@ -346,18 +410,18 @@
 
         if (!resp.ok) {
           const errText = await resp.text();
+          let parsedErr = {};
           let retryAfterMs = 5000;
           try {
-            const parsed = JSON.parse(errText || "{}");
-            const retryAfter = Number(parsed?.error?.details?.retry_after || 0);
-            if (Number.isFinite(retryAfter) && retryAfter > 0) {
-              retryAfterMs = Math.max(1000, Math.round(retryAfter * 1000));
-            }
+            parsedErr = JSON.parse(errText || "{}");
           } catch {}
+          const parsedRetryAfterMs = parseRetryAfterMs(resp, parsedErr);
+          if (parsedRetryAfterMs > 0) retryAfterMs = parsedRetryAfterMs;
 
-          if (resp.status === 429) {
-            console.warn("[BG] Pull rate-limited; retry in", retryAfterMs, "ms");
-            return { status: "rate_limited", retryAfterMs };
+          if (resp.status === 429 || resp.status === 503) {
+            const waitMs = applyRateLimitWindow("pull", retryAfterMs);
+            console.warn("[BG] Pull rate-limited; retry in", waitMs, "ms");
+            return { status: "rate_limited", retryAfterMs: waitMs };
           }
 
           console.error("[BG] Pull failed with status", resp.status);
@@ -384,6 +448,9 @@
     }
 
     async function sendReportRequest(report) {
+      if (Date.now() < reportRateLimitedUntilMs) {
+        return false;
+      }
       const cfg = await authModule.loadSettings();
       if (!cfg.api_base || !authModule.isSecureApiBase(cfg.api_base)) return false;
 
@@ -442,6 +509,10 @@
             console.warn("[BG] Task no existe en DB, discarding orphan report");
             return true;
           }
+          if (resp.status === 429 || resp.status === 503) {
+            const retryAfterMs = parseRetryAfterMs(resp, errorPayload);
+            applyRateLimitWindow("report", retryAfterMs || 5000);
+          }
           return false;
         }
         return true;
@@ -454,10 +525,16 @@
     async function flushPendingReports() {
       if (reportFlushInFlight) return reportFlushInFlight;
       reportFlushInFlight = (async () => {
+        if (Date.now() < reportRateLimitedUntilMs) return false;
         const queue = await storageModule.getPendingReports();
         if (!queue.length) return true;
         const remaining = [];
-        for (const report of queue) {
+        for (let i = 0; i < queue.length; i += 1) {
+          if (Date.now() < reportRateLimitedUntilMs) {
+            remaining.push(...queue.slice(i));
+            break;
+          }
+          const report = queue[i];
           const ok = await sendReportRequest(report);
           if (!ok) remaining.push(report);
         }
@@ -506,6 +583,9 @@
       const minGap = heartbeatMinGapMs - 5000;
       if (!force && now - lastHeartbeatTs < minGap) {
         return true;
+      }
+      if (now < heartbeatRateLimitedUntilMs) {
+        return false;
       }
 
       const cfg = await authModule.loadSettings();
@@ -585,8 +665,19 @@
           return false;
         }
 
+        if (resp.status === 429 || resp.status === 503) {
+          const retryAfterMs = parseRetryAfterMs(resp);
+          const waitMs = applyHeartbeatRateLimitWindow(retryAfterMs);
+          if (now - lastHeartbeatRateLimitLogTs > 15000) {
+            console.warn("[BG] Heartbeat rate-limited; retry in", waitMs, "ms");
+            lastHeartbeatRateLimitLogTs = now;
+          }
+          return false;
+        }
+
         if (resp.ok) {
           lastHeartbeatTs = now;
+          heartbeatRateLimitedUntilMs = 0;
           if (lastAuthErrorReason) {
             lastAuthErrorReason = null;
             storageModule.saveState({ dm_last_auth_error: null }).catch((e) => {

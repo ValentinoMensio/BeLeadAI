@@ -41,6 +41,11 @@ import { initSendTab } from "./controllers/send-controller.js";
 let cleanupAll = null;
 let wsUnsubscribe = null;
 
+const DM_STATUS_UI_REFRESH_MIN_MS = 2500;
+const WS_SYNC_DEBOUNCE_MS = 1200;
+const WS_SYNC_FETCH_MIN_MS = 6000;
+const WS_SYNC_SEND_MIN_MS = 6000;
+
 function setStatus(msg, isErr = false) {
   const el = qs("#status");
   if (el) {
@@ -222,7 +227,7 @@ export async function init() {
   }
 
   const deps = buildDeps();
-  const { store, services, ui, dom } = deps;
+  const { store, services } = deps;
   const { getState, setState } = store;
 
   const setupApi = initSetup(deps);
@@ -279,8 +284,8 @@ export async function init() {
     setupApi.updateSetupChecklist(cfg, { apiReachable, tokenOk: tokenOkFromPing });
     const hint = document.getElementById("setup-network-error");
     if (hint) {
-      if (!apiReachable && pingResult.error?.message) {
-        hint.textContent = pingResult.error.message;
+      if (!apiReachable && pingResult.errorMessage) {
+        hint.textContent = pingResult.errorMessage;
         hint.style.display = "block";
       } else {
         hint.textContent = "";
@@ -396,6 +401,13 @@ export async function init() {
           targetContent.classList.add("active");
           targetContent.scrollIntoView({ block: "nearest", behavior: "instant" });
         }
+        if (tab.dataset.tab !== "send") {
+          sendApi.stopSendProgressPolling();
+          sendApi.stopSenderStatusPolling();
+        }
+        if (tab.dataset.tab !== "fetch") {
+          fetchApi.stopAutoRefresh();
+        }
         if (tab.dataset.tab === "send") {
           limitsApi.updateSandboxBadge();
           sendApi.updateSenderStatus();
@@ -439,6 +451,102 @@ export async function init() {
     }
   }
 
+  let dmUiRefreshTimer = null;
+  let dmUiRefreshInFlight = false;
+  let dmUiNeedsRecipientsRefresh = false;
+  let dmUiNeedsForceRefresh = false;
+  let lastDmUiRefreshTs = 0;
+  let wsSyncTimer = null;
+  let wsSyncInFlight = false;
+  let lastWsFetchSyncTs = 0;
+  let lastWsSendSyncTs = 0;
+
+  function activeTabName() {
+    return String(document.querySelector(".tab.active")?.dataset?.tab || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  async function refreshRecipientsPreservingSelection(force = false) {
+    await sendApi.refreshRecipients(force);
+    const sel = qs("#send_recipients_job_select");
+    const st = getState();
+    const selectedId = String(st.selectedSendJobId || "").trim();
+    if (!selectedId || !sel || sel.disabled) return;
+    const hasOption = [...(sel.options || [])].some((opt) => opt.value === selectedId);
+    if (!hasOption) return;
+    sel.value = selectedId;
+    await sendApi.onSendRecipientsJobChange(selectedId, st.selectedSendKind);
+  }
+
+  function scheduleDmUiRefresh({ force = false, refreshRecipients = false } = {}) {
+    if (refreshRecipients) dmUiNeedsRecipientsRefresh = true;
+    if (force) dmUiNeedsForceRefresh = true;
+    if (dmUiRefreshTimer) {
+      if (!force) return;
+      clearTimeout(dmUiRefreshTimer);
+      dmUiRefreshTimer = null;
+    }
+    const elapsed = Date.now() - lastDmUiRefreshTs;
+    const waitMs = force ? 0 : Math.max(0, DM_STATUS_UI_REFRESH_MIN_MS - elapsed);
+    dmUiRefreshTimer = setTimeout(async () => {
+      dmUiRefreshTimer = null;
+      if (dmUiRefreshInFlight) {
+        scheduleDmUiRefresh();
+        return;
+      }
+      dmUiRefreshInFlight = true;
+      try {
+        lastDmUiRefreshTs = Date.now();
+        const runForce = dmUiNeedsForceRefresh;
+        dmUiNeedsForceRefresh = false;
+        sendApi.updateSenderStatus();
+        await sendApi.refreshSendProgress(runForce);
+        if (dmUiNeedsRecipientsRefresh) {
+          dmUiNeedsRecipientsRefresh = false;
+          await refreshRecipientsPreservingSelection(true);
+        }
+      } finally {
+        dmUiRefreshInFlight = false;
+      }
+    }, waitMs);
+  }
+
+  async function runWsSync() {
+    if (wsSyncInFlight) return;
+    wsSyncInFlight = true;
+    try {
+      const now = Date.now();
+      const tab = activeTabName();
+      if (tab === "fetch" && now - lastWsFetchSyncTs >= WS_SYNC_FETCH_MIN_MS) {
+        lastWsFetchSyncTs = now;
+        await fetchApi.refreshJobsList(5);
+        const jid = getState().currentJobId;
+        if (jid) {
+          const stats = await fetchApi.checkJobStatus(jid);
+          if (stats) {
+            const sel = qs("#last_jobs_select");
+            renderJobDetails(null, stats, sel?.selectedOptions?.[0]?.dataset?.kind || "");
+          }
+        }
+      }
+      if (tab === "send" && now - lastWsSendSyncTs >= WS_SYNC_SEND_MIN_MS) {
+        lastWsSendSyncTs = now;
+        await sendApi.refreshSendProgress();
+      }
+    } finally {
+      wsSyncInFlight = false;
+    }
+  }
+
+  function scheduleWsSync() {
+    if (wsSyncTimer) return;
+    wsSyncTimer = setTimeout(() => {
+      wsSyncTimer = null;
+      runWsSync();
+    }, WS_SYNC_DEBOUNCE_MS);
+  }
+
   const onDmStatusUpdate = async (message) => {
     if (message.type !== "dm_status_update") return;
     if (message.data?.error === "thread_identity_not_verified") {
@@ -462,27 +570,22 @@ export async function init() {
         true
       );
     }
-    sendApi.updateSenderStatus();
-    await sendApi.refreshSendProgress();
-    if (message.data?.isRunning === false) {
-      await sendApi.refreshRecipients(true);
-      const sel = qs("#send_recipients_job_select");
-      const st = getState();
-      const selectedId = String(st.selectedSendJobId || "").trim();
-      if (selectedId && sel && !sel.disabled) {
-        const hasOption = [...(sel.options || [])].some((opt) => opt.value === selectedId);
-        if (hasOption) {
-          sel.value = selectedId;
-          await sendApi.onSendRecipientsJobChange(selectedId, st.selectedSendKind);
-        }
-      }
-    }
+    const senderStopped = message.data?.isRunning === false;
+    scheduleDmUiRefresh({ force: senderStopped, refreshRecipients: senderStopped });
   };
   chrome.runtime.onMessage.addListener(onDmStatusUpdate);
 
   const onPageHide = () => {
     sendApi.stopSenderStatusPolling();
     sendApi.stopSendProgressPolling();
+    if (dmUiRefreshTimer) {
+      clearTimeout(dmUiRefreshTimer);
+      dmUiRefreshTimer = null;
+    }
+    if (wsSyncTimer) {
+      clearTimeout(wsSyncTimer);
+      wsSyncTimer = null;
+    }
   };
   window.addEventListener("pagehide", onPageHide);
 
@@ -490,28 +593,26 @@ export async function init() {
     if (document.visibilityState === "hidden") {
       sendApi.stopSenderStatusPolling();
       sendApi.stopSendProgressPolling();
+      fetchApi.stopAutoRefresh();
     } else {
       if (configOk) {
         services.ensureJobsWsConnected();
-        sendApi.updateSenderStatus();
-        sendApi.refreshSendProgress();
+        const tab = activeTabName();
+        if (tab === "send") {
+          sendApi.updateSenderStatus();
+          sendApi.refreshSendProgress();
+        }
+        if (tab === "fetch") {
+          fetchApi.refreshJobsList(5);
+        }
         limitsApi.refreshLimitsWithCache(false);
       }
     }
   };
   window.addEventListener("visibilitychange", onVisibilityChange);
 
-  wsUnsubscribe = subscribeJobsUpdated(async () => {
-    await fetchApi.refreshJobsList(5);
-    await sendApi.refreshRecipients();
-    const jid = getState().currentJobId;
-    if (jid) {
-      const stats = await fetchApi.checkJobStatus(jid);
-      if (stats) {
-        const sel = qs("#last_jobs_select");
-        renderJobDetails(null, stats, sel?.selectedOptions?.[0]?.dataset?.kind || "");
-      }
-    }
+  wsUnsubscribe = subscribeJobsUpdated(() => {
+    scheduleWsSync();
   });
 
   if (configOk) sendApi.updateSenderStatus();
@@ -528,6 +629,14 @@ export async function init() {
     if (wsUnsubscribe) {
       wsUnsubscribe();
       wsUnsubscribe = null;
+    }
+    if (dmUiRefreshTimer) {
+      clearTimeout(dmUiRefreshTimer);
+      dmUiRefreshTimer = null;
+    }
+    if (wsSyncTimer) {
+      clearTimeout(wsSyncTimer);
+      wsSyncTimer = null;
     }
     fetchApi.stopAutoRefresh();
     cleanupAll = null;
