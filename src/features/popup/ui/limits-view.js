@@ -49,6 +49,15 @@ function resolveUsedToday(messages, safetyDaily) {
   return 0;
 }
 
+function resolveSentToday(messages, usedToday = 0) {
+  const direct =
+    toNumOrNull(messages?.sent_today) ??
+    toNumOrNull(messages?.messages_sent_today) ??
+    toNumOrNull(messages?.delivered_today);
+  if (direct != null) return Math.max(0, direct);
+  return Math.max(0, toNumOrNull(usedToday) ?? 0);
+}
+
 function resolveUsedMonth(messages, planMonth) {
   const direct =
     toNumOrNull(messages?.used_this_month) ??
@@ -363,8 +372,12 @@ function showLimitDetail(type) {
         : resetIn
           ? `Se restablece en: ${resetIn}`
           : "—";
+    const sentToday = resolveSentToday(limitsData.messages, usedToday);
     let dayHtml = '<div class="detail-title">Límite diario por cuenta (seguridad)</div>';
-    dayHtml += `<div class="detail-line">Enviados hoy: <strong>${usedToday}</strong> / ${limitToday != null ? limitToday : "∞"}</div>`;
+    dayHtml += `<div class="detail-line">Enviados hoy: <strong>${sentToday}</strong> / ${limitToday != null ? limitToday : "∞"}</div>`;
+    if (usedToday > sentToday) {
+      dayHtml += `<div class="detail-line">Cupo usado hoy: <strong>${usedToday}</strong> / ${limitToday != null ? limitToday : "∞"} (incluye pendientes)</div>`;
+    }
     dayHtml += `<div class="detail-line reset-in">${escapeHtml(resetLabel)}</div>`;
     detailEl.innerHTML = dayHtml;
   } else {

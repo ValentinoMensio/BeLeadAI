@@ -118,7 +118,14 @@ function resolveDailyLeadCounts(details) {
     pickCount(details, ["requested_to_send", "requested_send", "requested_limit", "requested"]) ??
     0;
 
-  return { pending, sent, requestedToAnalyze, requestedToSend };
+  const usedToday =
+    pickCount(details, ["used_today", "consumed_today", "messages_used_today"]) ??
+    Math.max(0, sent + pending);
+
+  const dailyLimit =
+    pickCount(details, ["limit", "daily_limit", "safety_messages_per_day", "daily_cap"]) ?? null;
+
+  return { pending, sent, requestedToAnalyze, requestedToSend, usedToday, dailyLimit };
 }
 
 function resolveQuotaAction(details, errMessage = "", rawText = "") {
@@ -151,15 +158,21 @@ function resolveQuotaAction(details, errMessage = "", rawText = "") {
 }
 
 function formatAnalyzeToSendDailyMessage(details, action = "generic") {
-  const { pending, sent, requestedToAnalyze, requestedToSend } = resolveDailyLeadCounts(details);
+  const { pending, sent, requestedToAnalyze, requestedToSend, usedToday, dailyLimit } =
+    resolveDailyLeadCounts(details);
   const requestedNow = action === "send" ? requestedToSend : requestedToAnalyze;
   const requestedLabel =
     action === "send" ? "A enviar" : action === "analyze" ? "A analizar" : "Solicitados ahora";
+  const usedLabel = dailyLimit != null ? `${usedToday}/${dailyLimit}` : String(usedToday);
   return (
     "Límite diario alcanzado. " +
-    "Ya enviaste " +
+    "Cupo usado hoy: " +
+    usedLabel +
+    " (enviados: " +
     sent +
-    " hoy. " +
+    " · pendientes: " +
+    pending +
+    "). " +
     "Pendientes: " +
     pending +
     " · " +
