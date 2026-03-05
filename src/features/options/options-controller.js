@@ -429,7 +429,9 @@ async function verifyWithPing() {
 
 async function fetchPingWithHeaders(baseUrl, headers, options = {}) {
   const networkOnly =
-    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    String(options?.cacheMode || "default")
+      .trim()
+      .toLowerCase() === "network-only";
   const empty = {
     urlOk: false,
     tokenOk: false,
@@ -491,7 +493,9 @@ function refreshCfgStatus() {
 
 async function fetchApiConfig(apiBase, options = {}) {
   const networkOnly =
-    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    String(options?.cacheMode || "default")
+      .trim()
+      .toLowerCase() === "network-only";
   if (!apiBase) return null;
   if (!isSecureApiBase(apiBase)) return null;
   if (!(await ensureApiHostPermission(apiBase, false))) return null;
@@ -1005,7 +1009,9 @@ function setQuotaBar(fillEl, parentProgress, value, maxVal) {
 
 async function fetchQuotas(options = {}) {
   const networkOnly =
-    String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    String(options?.cacheMode || "default")
+      .trim()
+      .toLowerCase() === "network-only";
   const loadingEl = $("#quotas_loading");
   const contentEl = $("#quotas_content");
   const base = normalizeBaseUrl($("#api_base")?.value);
@@ -1074,7 +1080,10 @@ async function fetchQuotas(options = {}) {
     const data = r?.data || null;
     const payload = unwrapApiDataEnvelope(data);
     if (!r?.ok || !data) {
-      const failureType = classifyLoginFailure({ status: r?.status || 0, error: data?.error || {} });
+      const failureType = classifyLoginFailure({
+        status: r?.status || 0,
+        error: data?.error || {},
+      });
       if (failureType === "update_required") {
         await persistVersionBlockState({ status: r?.status || 0, error: data?.error || {} });
         showVersionBlockScreen({

@@ -104,8 +104,7 @@ function resolveDailyLeadCounts(details) {
     "matched_total",
   ]);
 
-  const pending =
-    pendingDirect ?? (extracted != null ? Math.max(0, extracted - sent) : 0);
+  const pending = pendingDirect ?? (extracted != null ? Math.max(0, extracted - sent) : 0);
 
   const toAnalyze =
     pickCount(details, [
@@ -138,9 +137,9 @@ function formatLegacyLeadsInsufficientMessage(errMessage) {
   const usedMatch = raw.match(/Usados?\s+hoy\s*(\d+)/i);
   const remainingMatch = raw.match(/te\s+quedan\s*(\d+)/i);
   if (!requestedMatch && !usedMatch && !remainingMatch) return null;
-  const toAnalyze = requestedMatch ? toCountOrNull(requestedMatch[1]) ?? 0 : 0;
-  const sent = usedMatch ? toCountOrNull(usedMatch[1]) ?? 0 : 0;
-  const pending = remainingMatch ? toCountOrNull(remainingMatch[1]) ?? 0 : 0;
+  const toAnalyze = requestedMatch ? (toCountOrNull(requestedMatch[1]) ?? 0) : 0;
+  const sent = usedMatch ? (toCountOrNull(usedMatch[1]) ?? 0) : 0;
+  const pending = remainingMatch ? (toCountOrNull(remainingMatch[1]) ?? 0) : 0;
   return (
     "Cupo insuficiente. Pendientes: " +
     pending +

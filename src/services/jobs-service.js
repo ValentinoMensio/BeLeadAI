@@ -328,7 +328,11 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   }
 
   if (!jobsResult.ok) {
-    const error = buildServiceError(jobsResult, "JOBS_LIST_FAILED", "No se pudieron cargar los jobs.");
+    const error = buildServiceError(
+      jobsResult,
+      "JOBS_LIST_FAILED",
+      "No se pudieron cargar los jobs."
+    );
     return {
       ok: false,
       errorMessage: error.message,
@@ -539,7 +543,11 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
   try {
     const result = await apiFetch(base, path);
     if (!result.ok) {
-      const error = buildServiceError(result, "RECIPIENT_SOURCES_FAILED", "Error al cargar resultados.");
+      const error = buildServiceError(
+        result,
+        "RECIPIENT_SOURCES_FAILED",
+        "Error al cargar resultados."
+      );
       if (error.status === 401 && String(error.code || "") === "AUTH_REQUIRED") {
         error.message = "Falta autenticación. Probá la conexión en Opciones.";
       }

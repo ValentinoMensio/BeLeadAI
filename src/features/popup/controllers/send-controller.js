@@ -597,7 +597,8 @@ export function initSendTab(deps) {
 
         if (!recipientsResult?.ok) {
           const backoffSec = applySendApiBackoff(recipientsResult);
-          const status = Number(recipientsResult?.status || recipientsResult?.error?.status || 0) || 0;
+          const status =
+            Number(recipientsResult?.status || recipientsResult?.error?.status || 0) || 0;
           const nowTs = Date.now();
           const isRateLimited = status === 429 || status === 503;
           if (!isRateLimited || nowTs - lastRateLimitRecipientsLogTs >= 12000) {

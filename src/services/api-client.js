@@ -148,7 +148,9 @@ function getReadCachePolicy(group) {
 }
 
 function buildReadCacheKey(method, url) {
-  return `${String(method || "GET").trim().toUpperCase()}::${String(url || "").trim()}`;
+  return `${String(method || "GET")
+    .trim()
+    .toUpperCase()}::${String(url || "").trim()}`;
 }
 
 function clearReadCache() {
@@ -224,7 +226,9 @@ function getCachedApiResult(cacheKey, group, mode = "fresh") {
 }
 
 function shouldCacheReadResponse(method, group, status) {
-  const m = String(method || "").trim().toUpperCase();
+  const m = String(method || "")
+    .trim()
+    .toUpperCase();
   if (m !== "GET" && m !== "HEAD") return false;
   const policy = getReadCachePolicy(group);
   if (!policy || policy.freshMs <= 0) return false;
@@ -286,7 +290,10 @@ export async function apiFetch(baseUrl, path, options = {}) {
   const pathForGrouping = pathRaw.split("?")[0] || pathRaw;
   const requestGroup = classifyRequestGroup(methodUpper, pathForGrouping);
   const url = buildApiUrl(base, pathRaw);
-  const allowReadCache = String(cacheMode || "default").trim().toLowerCase() !== "network-only";
+  const allowReadCache =
+    String(cacheMode || "default")
+      .trim()
+      .toLowerCase() !== "network-only";
   const canUseReadCache = allowReadCache && (methodUpper === "GET" || methodUpper === "HEAD");
   const readCacheKey = canUseReadCache ? buildReadCacheKey(methodUpper, url) : "";
 
@@ -378,7 +385,8 @@ export async function apiFetch(baseUrl, path, options = {}) {
         if (readCacheKey && isTransientResponseStatus(resp.status) && resp.status !== 426) {
           const staleCached = getCachedApiResult(readCacheKey, requestGroup, "stale");
           if (staleCached?.meta) {
-            staleCached.meta.reason = resp.status === 429 || resp.status === 503 ? "rate_limited" : "upstream_error";
+            staleCached.meta.reason =
+              resp.status === 429 || resp.status === 503 ? "rate_limited" : "upstream_error";
             return staleCached;
           }
         }
@@ -467,7 +475,10 @@ export function classifyFetchError(e) {
 const PING_TIMEOUT_MS = 12000;
 
 async function probeLoginFailure(cfg, options = {}) {
-  const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+  const networkOnly =
+    String(options?.cacheMode || "default")
+      .trim()
+      .toLowerCase() === "network-only";
   const apiKey = String(cfg?.api_token || "").trim();
   const apiBase = String(cfg?.api_base || "").trim();
   if (!apiKey || !apiBase || !isSecureApiBase(apiBase)) {
@@ -572,7 +583,10 @@ export async function fetchVersionMeta(apiBase) {
 
 /** Valida URL + Token. GET /ext/v2/ping. No loguea credenciales. */
 export async function fetchPing(cfg, options = {}) {
-  const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+  const networkOnly =
+    String(options?.cacheMode || "default")
+      .trim()
+      .toLowerCase() === "network-only";
   const base = (cfg?.api_base || "").trim().replace(/\/+$/, "");
   const empty = {
     urlOk: false,
@@ -621,14 +635,24 @@ export async function fetchPing(cfg, options = {}) {
       parsed?.error?.details && typeof parsed.error.details === "object"
         ? parsed.error.details
         : null;
-    const apiErrorMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
+    const apiErrorMessage = toUserApiErrorMessage(
+      r.status,
+      parsed,
+      text,
+      getRetryAfterSec(r, parsed)
+    );
     const planName =
       (errorDetails?.plan_name && String(errorDetails.plan_name).trim()) ||
       (errorDetails?.plan_id && String(errorDetails.plan_id).trim()) ||
       null;
     const serverReachable = r.ok || r.status === 401 || r.status === 403;
     if (!serverReachable && !r.ok) {
-      const fallbackMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
+      const fallbackMessage = toUserApiErrorMessage(
+        r.status,
+        parsed,
+        text,
+        getRetryAfterSec(r, parsed)
+      );
       const error = buildApiError(r.status, parsed, fallbackMessage, r);
       return {
         urlOk: false,
@@ -676,7 +700,12 @@ export async function fetchPing(cfg, options = {}) {
       if (isUpdateRequiredError(r.status, parsed)) {
         persistVersionBlockState(r.status, parsed);
       }
-      const fallbackMessage = toUserApiErrorMessage(r.status, parsed, text, getRetryAfterSec(r, parsed));
+      const fallbackMessage = toUserApiErrorMessage(
+        r.status,
+        parsed,
+        text,
+        getRetryAfterSec(r, parsed)
+      );
       const error = buildApiError(r.status, parsed, fallbackMessage, r);
       return {
         urlOk: true,
