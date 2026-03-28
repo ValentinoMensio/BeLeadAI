@@ -13,8 +13,9 @@ function isValidApiBase(url) {
 }
 
 function hasAuth(cfg) {
-  if ((cfg.jwt_token || "").toString().trim()) return true;
-  return false;
+  const accessToken = String(cfg?.access_token || "").trim();
+  const accessExpiresAt = Number(cfg?.access_expires_at || 0) || 0;
+  return !!accessToken || accessExpiresAt > Date.now();
 }
 
 function openOptions() {
@@ -56,11 +57,11 @@ export function initSetup(deps) {
     const sendHintEl = document.getElementById("send-tab-account-hint");
     try {
       const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
-      const tabDisplay = r?.username
-        ? "@" + r.username
-        : r?.user_id != null
-          ? "ID: " + r.user_id
-          : "";
+      const username = String(r?.username || "")
+        .trim()
+        .toLowerCase();
+      const userId = String(r?.user_id || "").trim();
+      const tabDisplay = username ? "@" + username : userId ? "ID: " + userId : "";
       if (tabDisplay) {
         if (labelEl) labelEl.textContent = "Cuenta en pestaña: " + tabDisplay;
         if (iconEl) iconEl.textContent = "✓";

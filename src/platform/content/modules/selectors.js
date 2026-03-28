@@ -1,5 +1,12 @@
 (function initContentSelectorsModule(globalScope) {
   function createContentSelectorsModule() {
+    const INTERNAL_PACING = Object.freeze({
+      uiSettleMinMs: 180,
+      uiSettleMaxMs: 650,
+      uiRetryPollMs: 180,
+      sendButtonPollMs: 300,
+    });
+
     const HUMAN_CONFIG = {
       typingBaseMs: 50,
       typingJitterMs: 30,
@@ -51,6 +58,14 @@
 
     function randomBetween(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function deepFreeze(value) {
+      if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+      Object.getOwnPropertyNames(value).forEach((key) => {
+        deepFreeze(value[key]);
+      });
+      return Object.freeze(value);
     }
 
     function sleep(ms) {
@@ -135,6 +150,29 @@
       return null;
     }
 
+    async function waitForCondition(checkFn, options = {}) {
+      const {
+        timeout = 5000,
+        pollMs = INTERNAL_PACING.uiRetryPollMs,
+        settleMinMs = 0,
+        settleMaxMs = 0,
+      } = options;
+      const start = Date.now();
+      while (Date.now() - start < timeout) {
+        try {
+          const result = await checkFn();
+          if (result) {
+            if (settleMaxMs > 0) {
+              await humanDelay(Math.max(0, settleMinMs), Math.max(settleMinMs, settleMaxMs));
+            }
+            return result;
+          }
+        } catch {}
+        await sleep(pollMs);
+      }
+      return null;
+    }
+
     function findSendButton() {
       const labels = ["Send", "Enviar"];
       for (const label of labels) {
@@ -157,10 +195,12 @@
       while (Date.now() - start < timeout) {
         const btn = findSendButton();
         if (btn && isElementVisible(btn)) return btn;
-        await sleep(300);
+        await sleep(INTERNAL_PACING.sendButtonPollMs);
       }
       return waitForElement(HUMAN_CONFIG.selectors.sendButton, 3000, "botón Send");
     }
+
+    deepFreeze(HUMAN_CONFIG);
 
     return {
       HUMAN_CONFIG,
@@ -168,6 +208,7 @@
       sleep,
       isElementVisible,
       humanDelay,
+      waitForCondition,
       waitForElement,
       findSendButton,
       waitForSendButton,

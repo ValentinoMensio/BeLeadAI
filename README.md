@@ -1,6 +1,6 @@
 # BeLeadAI Enqueuer (Chrome MV3)
 
-[![Version](https://img.shields.io/badge/version-0.3.0-1f6feb.svg)](../../releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-1f6feb.svg)](../../releases)
 [![Distribucion](https://img.shields.io/badge/distribucion-GitHub%20Releases-2ea043.svg)](../../releases)
 [![Licencia](https://img.shields.io/badge/licencia-MIT-7f5af0.svg)](./LICENSE)
 

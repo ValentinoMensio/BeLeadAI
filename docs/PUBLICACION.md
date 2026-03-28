@@ -9,7 +9,10 @@ npm ci
 npm run lint
 npm run format:check
 npm run test
+npm run check:contract
 ```
+
+Si estas tocando integraciones backend/contratos, corre tambien las validaciones del backend.
 
 ## 2) Generar artefactos de release
 
@@ -31,6 +34,7 @@ sha256sum -c extension-vX.Y.Z.sha256
 ## 4) Actualizar notas de version
 
 - Edita `RELEASE_NOTES.md` con highlights reales de la version.
+- Actualiza `CHANGELOG.md` si corresponde.
 - Verifica que `manifest.json` y `package.json` tengan la misma version.
 
 ## 5) Publicar tag y release

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/config.response.schema.json",
+  "title": "GET /config success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "max_message_length": {
+          "type": ["integer", "number"]
+        },
+        "min_message_length": {
+          "type": ["integer", "number"]
+        },
+        "max_client_prompt_length": {
+          "type": ["integer", "number"]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

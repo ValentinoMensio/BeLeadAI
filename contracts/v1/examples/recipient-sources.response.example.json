@@ -1,0 +1,22 @@
+{
+  "schema": "../recipient-sources.response.schema.json",
+  "payload": {
+    "data": {
+      "has_active_work": false,
+      "active_work": null,
+      "items": [
+        {
+          "source_id": "job_123",
+          "source_kind": "followings_flow",
+          "label": "Run 2026-03-26",
+          "pending_count": 24,
+          "total_count": 80,
+          "status": "completed",
+          "created_at": "2026-03-26T15:22:10Z"
+        }
+      ],
+      "next_cursor": null,
+      "refresh_pending": false
+    }
+  }
+}

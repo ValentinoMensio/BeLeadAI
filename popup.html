@@ -22,10 +22,15 @@
             </div>
           </div>
           <div class="header-right">
-            <div class="status-pill" id="cfgStatus">
+            <button
+              type="button"
+              class="status-pill"
+              id="cfgStatus"
+              aria-label="Abrir opciones de configuración"
+            >
               <span class="dot" id="cfgDot"></span>
               <span id="cfgText">Config</span>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -35,11 +40,13 @@
           <div id="limits-summary" class="limits-summary loading">
             <div class="limits-block limits-block-client">
               <div class="limits-status-line">
-                <span
+                <button
+                  type="button"
                   id="limits-row-day"
                   class="limits-item limit-ok"
                   data-type="day"
                   title="Clic para ver detalle"
+                  aria-label="Ver detalle del límite diario"
                 >
                   <span
                     id="limits-circle-day"
@@ -50,12 +57,14 @@
                     aria-valuemax="100"
                   ></span>
                   <span class="limits-item-text">Hoy</span>
-                </span>
-                <span
+                </button>
+                <button
+                  type="button"
                   id="limits-row-month"
                   class="limits-item limit-ok"
                   data-type="month"
                   title="Clic para ver detalle"
+                  aria-label="Ver detalle del límite mensual"
                 >
                   <span
                     id="limits-circle-month"
@@ -66,7 +75,7 @@
                     aria-valuemax="100"
                   ></span>
                   <span class="limits-item-text">Plan</span>
-                </span>
+                </button>
               </div>
             </div>
             <div id="limits-detail" class="limits-detail"></div>
@@ -75,13 +84,13 @@
         </div>
 
         <!-- ---------- Pantalla de inicio (falta API/config) ---------- -->
-        <div id="setup-screen" class="setup-screen">
+          <div id="setup-screen" class="setup-screen">
           <div class="icon">
             <img class="setup-icon-img" src="icons/gear.svg" alt="" aria-hidden="true" />
           </div>
           <h2>Configuración necesaria</h2>
           <p>Para usar BeLeadAI configurá la conexión en Opciones.</p>
-          <div class="checklist" id="setup-checklist">
+            <div class="checklist" id="setup-checklist">
             <div class="checklist-item" id="check-api">
               <span class="check-icon">○</span>
               <span>Servidor</span>
@@ -98,9 +107,12 @@
               <span class="check-icon" id="check-tab-icon">○</span>
               <span id="check-tab-label">Cuenta en pestaña: —</span>
             </div>
+            </div>
+            <button id="btn-open-options" type="button" class="btn secondary">
+              Abrir Opciones
+            </button>
+            <p id="setup-network-error" class="setup-network-error is-hidden"></p>
           </div>
-          <p id="setup-network-error" class="setup-network-error is-hidden"></p>
-        </div>
 
         <div id="expired-screen" class="expired-screen">
           <div class="icon">
@@ -155,14 +167,31 @@
 
         <!-- ---------- UI principal (tabs Analizar / Enviar) ---------- -->
         <div id="main-ui">
-          <div class="tabs">
-            <button class="tab active" data-tab="fetch">
+          <div class="tabs" role="tablist" aria-label="Secciones del popup">
+            <button
+              id="tab-btn-fetch"
+              type="button"
+              class="tab active"
+              data-tab="fetch"
+              role="tab"
+              aria-selected="true"
+              aria-controls="tab-fetch"
+            >
               <span class="tab-icon"
                 ><img class="tab-icon-img" src="icons/magnifying.svg" alt="" aria-hidden="true"
               /></span>
               <span>Analizar</span>
             </button>
-            <button class="tab" data-tab="send">
+            <button
+              id="tab-btn-send"
+              type="button"
+              class="tab"
+              data-tab="send"
+              role="tab"
+              aria-selected="false"
+              aria-controls="tab-send"
+              tabindex="-1"
+            >
               <span class="tab-icon"
                 ><img class="tab-icon-img" src="icons/send.svg" alt="" aria-hidden="true"
               /></span>
@@ -172,7 +201,12 @@
 
           <div class="content">
             <!-- ---------- TAB: EXTRAER (followings / analizar) ---------- -->
-            <div id="tab-fetch" class="tab-content active">
+            <div
+              id="tab-fetch"
+              class="tab-content active"
+              role="tabpanel"
+              aria-labelledby="tab-btn-fetch"
+            >
               <div class="section">
                 <p class="section-title">
                   <span class="section-title-icon"
@@ -319,15 +353,22 @@
 
                 <div id="job_progress" class="is-hidden">
                   <div class="progress"><div id="progress_fill"></div></div>
+                  <div id="progress_text" class="progress-text"></div>
                 </div>
 
-                <div class="status-line" id="status"></div>
+                <div class="status-line" id="status" role="status" aria-live="polite"></div>
                 <div class="status-meta" id="fetch_last_sync">Sin sincronizar</div>
               </div>
             </div>
 
             <!-- ---------- TAB: ENVIAR (origen destinatarios + mensaje) ---------- -->
-            <div id="tab-send" class="tab-content">
+            <div
+              id="tab-send"
+              class="tab-content"
+              role="tabpanel"
+              aria-labelledby="tab-btn-send"
+              hidden
+            >
               <div class="section">
                 <p class="section-title">
                   <span class="section-title-icon"
@@ -352,6 +393,13 @@
 
                 <div id="send_recipients_info" class="recipients-info is-hidden">
                   <span class="hint" id="send_recipients_summary"></span>
+                  <input
+                    type="search"
+                    id="send_recipients_search"
+                    class="input"
+                    placeholder="Buscar destinatarios..."
+                    autocomplete="off"
+                  />
                   <button
                     type="button"
                     class="recipients-toggle"
@@ -363,13 +411,16 @@
                   </button>
                   <div id="recipients_actions" class="recipients-actions is-hidden">
                     <button type="button" class="recipients-action-btn" data-action="select-all">
-                      Todos
+                      Todos visibles
                     </button>
                     <button type="button" class="recipients-action-btn" data-action="deselect-all">
-                      Ninguno
+                      Limpiar selección
                     </button>
                   </div>
                   <div id="send_recipients_list" class="recipients-list is-hidden"></div>
+                  <button type="button" id="recipients_load_more" class="btn secondary is-hidden">
+                    Cargar más
+                  </button>
                 </div>
               </div>
 
@@ -444,8 +495,31 @@
                   <div class="progress"><div id="send_progress_fill"></div></div>
                 </div>
 
-                <div class="status-line" id="send_status">Listo para configurar.</div>
+                <div class="status-line" id="send_status" role="status" aria-live="polite">
+                  Listo para configurar.
+                </div>
                 <div class="status-meta" id="send_last_sync">Sin sincronizar</div>
+
+                <div id="send_confirm_modal" class="send-confirm-modal is-hidden" aria-hidden="true">
+                  <div class="send-confirm-backdrop" data-action="close-send-confirm"></div>
+                  <div
+                    class="send-confirm-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="send_confirm_title"
+                  >
+                    <p id="send_confirm_title" class="send-confirm-title">Confirmar envío real</p>
+                    <p id="send_confirm_body" class="send-confirm-body"></p>
+                    <div class="send-confirm-actions">
+                      <button type="button" class="btn secondary" id="send_confirm_cancel">
+                        Cancelar
+                      </button>
+                      <button type="button" class="btn danger" id="send_confirm_accept">
+                        Enviar ahora
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
                 <div class="divider"></div>
               </div>
@@ -454,12 +528,18 @@
         </div>
 
         <!-- ---------- Footer (link a Opciones) ---------- -->
-        <div class="footer-note" id="footer-note" title="Abrir Opciones">
+        <button
+          type="button"
+          class="footer-note"
+          id="footer-note"
+          title="Abrir Opciones"
+          aria-label="Abrir opciones avanzadas"
+        >
           <span class="footer-icon"
             ><img class="footer-icon-img" src="icons/gear.svg" alt="" aria-hidden="true"
           /></span>
           <span>Configuración avanzada en <b>Opciones</b></span>
-        </div>
+        </button>
       </div>
     </div>
 

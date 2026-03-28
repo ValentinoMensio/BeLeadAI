@@ -4,7 +4,17 @@
  */
 
 const AUTH_LOCAL_KEYS = ["client_id"];
-const AUTH_SESSION_KEYS = ["jwt_token", "jwt_expires_at"];
+const AUTH_STORAGE_LOCAL_KEYS = {
+  clientId: "auth.client_id",
+  deviceId: "auth.device_id",
+  refreshExpiresAt: "auth.refresh_expires_at",
+  sessionId: "auth.session_id",
+};
+const AUTH_STORAGE_SESSION_KEYS = {
+  accessToken: "auth.session_access_token",
+  accessExpiresAt: "auth.session_access_expires_at",
+};
+const LEGACY_AUTH_STORAGE_KEYS = ["api" + "_token", "jwt" + "_token", "jwt" + "_expires_at"];
 
 const DEFAULT_SYNC = {
   api_base: "",
@@ -14,8 +24,17 @@ const DEFAULT_SYNC = {
   default_limit: 50,
   chatgpt_prompt: "",
 };
-const DEFAULT_LOCAL = { jwt_token: "", jwt_expires_at: 0, client_id: "" };
-const DEFAULT_SESSION = { jwt_token: "", jwt_expires_at: 0 };
+const DEFAULT_LOCAL = {
+  client_id: "",
+  [AUTH_STORAGE_LOCAL_KEYS.clientId]: "",
+  [AUTH_STORAGE_LOCAL_KEYS.deviceId]: "",
+  [AUTH_STORAGE_LOCAL_KEYS.refreshExpiresAt]: 0,
+  [AUTH_STORAGE_LOCAL_KEYS.sessionId]: "",
+};
+const DEFAULT_SESSION = {
+  [AUTH_STORAGE_SESSION_KEYS.accessToken]: "",
+  [AUTH_STORAGE_SESSION_KEYS.accessExpiresAt]: 0,
+};
 
 function getSession(defaults) {
   return new Promise((resolve) => {
@@ -43,19 +62,23 @@ export function loadSettings() {
     chrome.storage.sync.get(DEFAULT_SYNC, (syncCfg) => {
       chrome.storage.local.get(DEFAULT_LOCAL, async (localCfg) => {
         const sessionCfg = await getSession(DEFAULT_SESSION);
-        const jwtToken = (sessionCfg.jwt_token || localCfg.jwt_token || "").trim();
-        const jwtExpiresAt = Number(sessionCfg.jwt_expires_at || localCfg.jwt_expires_at || 0) || 0;
-        if ((jwtToken && !sessionCfg.jwt_token) || (jwtExpiresAt && !sessionCfg.jwt_expires_at)) {
-          await setSession({ jwt_token: jwtToken, jwt_expires_at: jwtExpiresAt });
-          chrome.storage.local.remove(["api_token", "jwt_token", "jwt_expires_at"]);
-        }
+        const accessToken = String(sessionCfg[AUTH_STORAGE_SESSION_KEYS.accessToken] || "").trim();
+        const accessExpiresAt =
+          Number(sessionCfg[AUTH_STORAGE_SESSION_KEYS.accessExpiresAt] || 0) || 0;
         const cfg = {
           ...syncCfg,
           ...localCfg,
           api_token: "",
-          jwt_token: jwtToken,
-          jwt_expires_at: jwtExpiresAt,
+          access_token: accessToken,
+          access_expires_at: accessExpiresAt,
+          client_id:
+            String(localCfg[AUTH_STORAGE_LOCAL_KEYS.clientId] || "").trim() ||
+            String(localCfg.client_id || "").trim(),
+          device_id: String(localCfg[AUTH_STORAGE_LOCAL_KEYS.deviceId] || "").trim(),
+          refresh_expires_at: Number(localCfg[AUTH_STORAGE_LOCAL_KEYS.refreshExpiresAt] || 0) || 0,
+          session_id: String(localCfg[AUTH_STORAGE_LOCAL_KEYS.sessionId] || "").trim(),
         };
+        chrome.storage.local.remove(LEGACY_AUTH_STORAGE_KEYS, () => {});
         if ((cfg.x_client_id || "").trim() && !(cfg.client_id_manual || "").trim()) {
           cfg.client_id_manual = (cfg.client_id_manual || cfg.x_client_id || "").trim();
           cfg.client_id_source = "manual";
@@ -72,7 +95,8 @@ export function saveSettings(patch) {
   const syncPatch = {};
   for (const [k, v] of Object.entries(patch)) {
     if (AUTH_LOCAL_KEYS.includes(k)) localPatch[k] = v;
-    else if (AUTH_SESSION_KEYS.includes(k)) sessionPatch[k] = v;
+    else if (k === "access_token") sessionPatch[AUTH_STORAGE_SESSION_KEYS.accessToken] = v;
+    else if (k === "access_expires_at") sessionPatch[AUTH_STORAGE_SESSION_KEYS.accessExpiresAt] = v;
     else syncPatch[k] = v;
   }
   return new Promise((resolve) => {
@@ -83,10 +107,7 @@ export function saveSettings(patch) {
     const done = async () => {
       if (hasSession) {
         await setSession(sessionPatch);
-        chrome.storage.local.remove(
-          ["api_token", "jwt_token", "jwt_expires_at", "refresh_token"],
-          () => resolve()
-        );
+        chrome.storage.local.remove(LEGACY_AUTH_STORAGE_KEYS, () => resolve());
         return;
       }
       resolve();
@@ -105,5 +126,8 @@ export function saveSettings(patch) {
 }
 
 export function clearSessionAuth() {
-  return removeSession(["jwt_token", "jwt_expires_at"]);
+  return removeSession([
+    AUTH_STORAGE_SESSION_KEYS.accessToken,
+    AUTH_STORAGE_SESSION_KEYS.accessExpiresAt,
+  ]);
 }

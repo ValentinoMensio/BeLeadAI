@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "BeLeadAI Enqueuer",
   "description": "Encola fetch_followings y envía mensajes usando la cuenta del cliente.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "action": {
     "default_title": "BeLeadAI",
     "default_popup": "popup.html",
@@ -29,6 +29,10 @@
       "js": [
         "src/platform/content/modules/selectors.js",
         "src/platform/content/modules/observers.js",
+        "src/platform/content/modules/input-actions.js",
+        "src/platform/content/modules/account-identity.js",
+        "src/platform/content/modules/direct-search.js",
+        "src/platform/content/modules/message-actions.js",
         "src/platform/content/modules/actions.js",
         "src/platform/content/modules/messaging.js",
         "src/platform/content/content-script.js"

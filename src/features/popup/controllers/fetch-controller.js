@@ -9,6 +9,7 @@ import {
   normalizeJobStatus,
 } from "../../../shared/domain/job-contract.js";
 import { logApiErrorDiagnostic } from "../../../shared/errors/error-diagnostics.js";
+import { generateIdempotencyKey } from "../../../shared/utils/idempotency.js";
 
 const DEEP_RUBROS_OPTIONS = [
   "Health_Medical",
@@ -74,9 +75,10 @@ function toCanonicalDeepRubro(v) {
   if (!raw) return "";
   return LEGACY_RUBRO_MAP[raw] || raw;
 }
+
 const STATUS_CHECK_INTERVAL_MS = 7000;
 
-window.selectedDeepRubros = window.selectedDeepRubros || new Set();
+let selectedDeepRubros = new Set();
 
 function toCanonicalResultId(value, kindHint = "job") {
   const raw = String(value || "").trim();
@@ -99,6 +101,7 @@ export function initFetchTab(deps) {
     saveSettings,
     getAuthHeaders,
     apiFetch,
+    fetchPing,
     loadLastJobsService,
     loadJobSummary,
   } = services;
@@ -107,6 +110,7 @@ export function initFetchTab(deps) {
 
   let refreshJobsListInFlight = null;
   let autoRefreshInFlight = false;
+  let autoRefreshIntervalId = null;
   let delayedProgressTimerId = null;
   let fetchApiBackoffUntil = 0;
   let lastRateLimitJobsLogTs = 0;
@@ -192,7 +196,7 @@ export function initFetchTab(deps) {
   }
 
   function syncAutoRefresh(stats) {
-    const hasInterval = !!getState().statusCheckInterval;
+    const hasInterval = !!autoRefreshIntervalId;
     const shouldPoll = shouldPollJobProgress(stats);
     if (shouldPoll && !hasInterval) {
       startAutoRefresh(STATUS_CHECK_INTERVAL_MS);
@@ -211,6 +215,10 @@ export function initFetchTab(deps) {
     const vals = [remToday, remMonth].filter((v) => Number.isFinite(v) && v >= 0);
     if (!vals.length) return null;
     return Math.max(0, Math.min(...vals));
+  }
+
+  function getRemainingFollowingsRequestLimit() {
+    return getRemainingMessagesForLeads();
   }
 
   function isSendQuotaBlocking(blockingQuota) {
@@ -237,7 +245,7 @@ export function initFetchTab(deps) {
   function enforceLimitInputByRemainingMessages(showMessage = false) {
     const limitInput = qs("#limit");
     if (!limitInput) return null;
-    const remaining = getRemainingMessagesForLeads();
+    const remaining = getRemainingFollowingsRequestLimit();
     if (!Number.isFinite(remaining)) {
       limitInput.removeAttribute("max");
       return null;
@@ -248,7 +256,7 @@ export function initFetchTab(deps) {
     if (current > remaining) {
       limitInput.value = String(Math.max(1, remaining));
       if (showMessage) {
-        setFetchStatus(`Leads ajustados a ${remaining} (mensajes restantes).`, true);
+        setFetchStatus(`Leads ajustados a ${remaining} (cupo disponible).`, true);
       }
     }
     return remaining;
@@ -272,7 +280,7 @@ export function initFetchTab(deps) {
       const backoffSec = applyFetchApiBackoff(mainSummary);
       if (Number(mainSummary?.error?.status || 0) === 401) {
         setFetchStatus("Sesion expirada. Proba la conexion en Opciones.", true);
-        await saveSettings({ jwt_token: "", jwt_expires_at: 0 });
+        await saveSettings({ access_token: "", access_expires_at: 0 });
         return null;
       }
       const summaryStatus = Number(mainSummary?.error?.status || 0);
@@ -371,10 +379,9 @@ export function initFetchTab(deps) {
   }
 
   function stopAutoRefresh() {
-    const s = getState();
-    if (s.statusCheckInterval) {
-      clearInterval(s.statusCheckInterval);
-      setState({ statusCheckInterval: null });
+    if (autoRefreshIntervalId) {
+      clearInterval(autoRefreshIntervalId);
+      autoRefreshIntervalId = null;
     }
     autoRefreshInFlight = false;
   }
@@ -412,7 +419,7 @@ export function initFetchTab(deps) {
         autoRefreshInFlight = false;
       }
     }, intervalMs);
-    setState({ statusCheckInterval: id });
+    autoRefreshIntervalId = id;
   }
 
   async function refreshSelectedJobProgress() {
@@ -491,6 +498,15 @@ export function initFetchTab(deps) {
     return running?.id ? toCanonicalResultId(running.id, running.kind || "job") : "";
   }
 
+  async function getPersistedJobId() {
+    return await new Promise((resolve) => {
+      chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (data) => {
+        const persisted = toCanonicalResultId(data?.last_flow_id || data?.last_job_id || "", "result");
+        resolve(persisted || "");
+      });
+    });
+  }
+
   async function refreshJobsList(limit = 5) {
     if (hasFetchApiBackoff()) {
       updateFetchSyncLabel();
@@ -524,18 +540,21 @@ export function initFetchTab(deps) {
         if (!sel) return;
         const currentJobId = getState().currentJobId;
         const runningJobId = pickRunningJobId(extractJobs);
+        const persistedJobId = await getPersistedJobId();
         const preferredJobId = toCanonicalResultId(
-          runningJobId || savedJobId || currentJobId || "",
+          runningJobId || currentJobId || persistedJobId || savedJobId || "",
           "result"
         );
         renderJobsList(sel, extractJobs, {
           selectedJobId: preferredJobId,
         });
-        if (!sel.value && runningJobId) {
-          ensureSelectedJobOption(sel, runningJobId, "result");
+        if (!sel.value && preferredJobId) {
+          const kindHint = preferredJobId.startsWith("flow:") ? "followings_flow" : "result";
+          ensureSelectedJobOption(sel, preferredJobId, kindHint);
         }
         if (sel.value) {
           setState({ currentJobId: sel.value });
+          chrome.storage.local.set({ last_job_id: sel.value });
           const stats = await checkJobStatus(sel.value);
           if (stats) {
             renderJobDetails(null, stats, sel.selectedOptions?.[0]?.dataset?.kind || "");
@@ -575,8 +594,21 @@ export function initFetchTab(deps) {
       let fromAccount = "";
       try {
         const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
-        fromAccount = ((r?.user_id != null ? String(r.user_id) : "") || r?.username || "").trim();
+        const username = String(r?.username || "")
+          .trim()
+          .toLowerCase();
+        const userId = String(r?.user_id || "").trim();
+        fromAccount = username || userId;
       } catch {}
+      if (!fromAccount) {
+        try {
+          const ping = await fetchPing(cfg);
+          const accountUsername = String(ping?.accountUsername || "")
+            .trim()
+            .toLowerCase();
+          fromAccount = accountUsername;
+        } catch {}
+      }
       if (!fromAccount) {
         return setFetchStatus(
           "Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.",
@@ -587,7 +619,7 @@ export function initFetchTab(deps) {
       let limit = parseInt((qs("#limit") && qs("#limit").value) || "50", 10);
       if (!target.trim()) return setFetchStatus("Ingresá un target.", true);
       if (!Number.isFinite(limit) || limit <= 0) limit = cfg.default_limit || 50;
-      const remainingMsgs = getRemainingMessagesForLeads();
+      const remainingMsgs = getRemainingFollowingsRequestLimit();
       if (Number.isFinite(remainingMsgs)) {
         if (remainingMsgs <= 0) {
           setFetchStatus(
@@ -606,18 +638,19 @@ export function initFetchTab(deps) {
       }
       const depthChecked = document.querySelector('input[name="analysis_depth"]:checked');
       const analysisDepthMode = depthChecked ? depthChecked.value : "all";
+      const idempotencyKey = generateIdempotencyKey();
       const followingsBody = {
         from_account: fromAccount,
         target_username: target.trim(),
         limit,
         analysis_depth_mode: analysisDepthMode,
+        idempotency_key: idempotencyKey,
+        idempotency_version: 2,
       };
       if (analysisDepthMode === "only_rubros") {
-        const deepRubros = window.selectedDeepRubros
-          ? Array.from(window.selectedDeepRubros)
-              .map(toCanonicalDeepRubro)
-              .filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
-          : [];
+        const deepRubros = Array.from(selectedDeepRubros)
+          .map(toCanonicalDeepRubro)
+          .filter((r) => DEEP_RUBROS_OPTIONS.includes(r));
         if (deepRubros.length === 0) {
           return setFetchStatus(
             "No se hará análisis profundo a ningún perfil. Elegí al menos una categoría.",
@@ -629,6 +662,9 @@ export function initFetchTab(deps) {
       const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
       const result = await apiFetch(base, API_PATHS.followingsEnqueue, {
         method: "POST",
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
         body: followingsBody,
       });
       setFetchStatus("Encolando job...", false, { force: true });
@@ -670,13 +706,10 @@ export function initFetchTab(deps) {
     }
 
     const raw = (qs("#usernames") && qs("#usernames").value) || "";
-    const usernames = raw
-      .split(/[\n,]/)
-      .map((s) => s.trim().toLowerCase())
-      .filter((s) => s.length > 0);
+    const usernames = [...new Set(raw.split(/[\n,]/).map((s) => s.trim().toLowerCase()).filter(Boolean))];
     if (usernames.length === 0) return setFetchStatus("Ingresá al menos un username.", true);
 
-    const remainingMsgs = getRemainingMessagesForLeads();
+    const remainingMsgs = getRemainingFollowingsRequestLimit();
     if (Number.isFinite(remainingMsgs)) {
       if (remainingMsgs <= 0) {
         setFetchStatus(
@@ -697,9 +730,18 @@ export function initFetchTab(deps) {
     let batchSize = parseInt((qs("#batch_size") && qs("#batch_size").value) || "25", 10);
     if (!Number.isFinite(batchSize) || batchSize <= 0) batchSize = 25;
     const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
+    const idempotencyKey = generateIdempotencyKey();
     const result = await apiFetch(base, API_PATHS.analyzeEnqueue, {
       method: "POST",
-      body: { usernames, batch_size: batchSize },
+      headers: {
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: {
+        usernames,
+        batch_size: batchSize,
+        idempotency_key: idempotencyKey,
+        idempotency_version: 2,
+      },
     });
     setFetchStatus("Encolando job...", false, { force: true });
     if (!result.ok) {
@@ -741,11 +783,9 @@ export function initFetchTab(deps) {
       warningEl.style.display = "none";
       return;
     }
-    const deepRubros = window.selectedDeepRubros
-      ? Array.from(window.selectedDeepRubros)
-          .map(toCanonicalDeepRubro)
-          .filter((r) => DEEP_RUBROS_OPTIONS.includes(r))
-      : [];
+    const deepRubros = Array.from(selectedDeepRubros)
+      .map(toCanonicalDeepRubro)
+      .filter((r) => DEEP_RUBROS_OPTIONS.includes(r));
     const noDeep = deepRubros.length === 0;
     warningEl.style.display = noDeep ? "block" : "none";
   }
@@ -753,29 +793,29 @@ export function initFetchTab(deps) {
   function initDepthRubrosChips() {
     const wrap = qs("#deep_rubros_chips");
     if (!wrap) return;
-    if (window.selectedDeepRubros && window.selectedDeepRubros.size > 0) {
+    if (selectedDeepRubros.size > 0) {
       const normalized = new Set();
-      window.selectedDeepRubros.forEach((v) => {
+      selectedDeepRubros.forEach((v) => {
         const canon = toCanonicalDeepRubro(v);
         if (canon && DEEP_RUBROS_OPTIONS.includes(canon)) normalized.add(canon);
       });
-      window.selectedDeepRubros = normalized;
+      selectedDeepRubros = normalized;
     }
-    wrap.innerHTML = "";
+    wrap.replaceChildren();
     DEEP_RUBROS_OPTIONS.forEach((rubro) => {
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.dataset.rubro = rubro;
       chip.textContent = DEEP_RUBROS_LABELS[rubro] || rubro;
-      if (window.selectedDeepRubros.has(rubro)) {
+      if (selectedDeepRubros.has(rubro)) {
         chip.classList.add("selected");
       }
       chip.addEventListener("click", () => {
-        if (window.selectedDeepRubros.has(rubro)) {
-          window.selectedDeepRubros.delete(rubro);
+        if (selectedDeepRubros.has(rubro)) {
+          selectedDeepRubros.delete(rubro);
           chip.classList.remove("selected");
         } else {
-          window.selectedDeepRubros.add(rubro);
+          selectedDeepRubros.add(rubro);
           chip.classList.add("selected");
         }
         updateAnalysisDepthOnlyRubrosWarning();
@@ -826,6 +866,7 @@ export function initFetchTab(deps) {
         limitInput.dispatchEvent(new Event("change", { bubbles: true }));
       };
       const onLimitChange = () => enforceLimitInputByRemainingMessages(false);
+      const onLimitsUpdated = () => enforceLimitInputByRemainingMessages(false);
       if (minusBtn) {
         minusBtn.addEventListener("click", onMinus);
         cleanupFns.push(() => minusBtn.removeEventListener("click", onMinus));
@@ -836,8 +877,10 @@ export function initFetchTab(deps) {
       }
       limitInput.addEventListener("change", onLimitChange);
       limitInput.addEventListener("blur", onLimitChange);
+      window.addEventListener("belead:limits-updated", onLimitsUpdated);
       cleanupFns.push(() => limitInput.removeEventListener("change", onLimitChange));
       cleanupFns.push(() => limitInput.removeEventListener("blur", onLimitChange));
+      cleanupFns.push(() => window.removeEventListener("belead:limits-updated", onLimitsUpdated));
       enforceLimitInputByRemainingMessages(false);
     }
 

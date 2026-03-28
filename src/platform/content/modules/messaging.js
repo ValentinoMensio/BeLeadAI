@@ -38,16 +38,27 @@
         }
 
         if (message.action === "get_current_username") {
-          const r = actionsModule.getCurrentInstagramUsername();
-          console.log(
-            "[BeLeadAI CS] get_current_username →",
-            r?.user_id ? "detectado" : "no detectado",
-            "(source:",
-            r?.source || "—",
-            ")"
-          );
-          sendResponse(r);
-          return false;
+          (async () => {
+            try {
+              const r = await actionsModule.getCurrentInstagramUsername();
+              console.log(
+                "[BeLeadAI CS] get_current_username →",
+                r?.username ? "username detectado" : "username no detectado",
+                "(source:",
+                r?.source || "—",
+                ")"
+              );
+              sendResponse(r);
+            } catch (e) {
+              sendResponse({
+                username: null,
+                user_id: null,
+                source: null,
+                error: e?.message || "get_current_username_failed",
+              });
+            }
+          })();
+          return true;
         }
 
         return false;

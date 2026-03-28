@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/recipient-sources.response.schema.json",
+  "title": "GET /ext/v2/recipient-sources success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "has_active_work": {
+          "type": "boolean"
+        },
+        "active_work": {
+          "type": ["object", "null"],
+          "properties": {
+            "id": { "type": ["string", "null"] },
+            "kind": { "type": ["string", "null"] },
+            "status": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source_id": { "type": "string" },
+              "source_kind": { "type": "string" },
+              "label": { "type": ["string", "null"] },
+              "pending_count": { "type": ["number", "integer"] },
+              "total_count": { "type": ["number", "integer"] },
+              "status": { "type": ["string", "null"] },
+              "created_at": { "type": ["string", "null"] }
+            },
+            "required": ["source_id", "source_kind"],
+            "additionalProperties": true
+          }
+        },
+        "next_cursor": {
+          "type": ["string", "null"]
+        },
+        "refresh_pending": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

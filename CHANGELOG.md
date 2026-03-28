@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## 0.4.0
+
+- Se refactorizo la extension en modulos mas pequeños para background, popup, options y content script, reduciendo acoplamiento y mejorando mantenibilidad.
+- Se agregaron contratos publicos versionados con ejemplos y validacion local para endpoints HTTP y eventos WebSocket.
+- Se amplio fuertemente la cobertura de tests con suites para runtime, orquestacion de jobs, content script y flujo paginado de destinatarios.
+- El flujo de destinatarios paso a paginacion real backend + frontend, con busqueda, "cargar mas" y seleccion persistente.
+- Se elimino el uso de `innerHTML` del codigo fuente principal y se saneo `popup-store` a estado serializable con acciones explicitas.
+- Se reemplazo la confirmacion nativa del envio real por un modal propio en el popup.
+
 ## 0.3.0
 
 - Se agregaron assets para publicacion profesional (`LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, templates y workflows de GitHub).

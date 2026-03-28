@@ -254,7 +254,16 @@ export async function loadLastJobs(baseUrl, limit = 5) {
     );
     const savedRawId = toCanonicalResultId(saved, "result");
     const savedId = extractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
-    return { ok: true, data: { extractJobs, savedJobId: savedId } };
+    return {
+      ok: true,
+      data: {
+        extractJobs,
+        savedJobId: savedId,
+        nextCursor: String(resultsData?.next_cursor || "").trim() || null,
+        refreshPending: !!resultsData?.refresh_pending,
+      },
+      observability: resultsResp.observability || null,
+    };
   }
 
   if (!shouldAttemptLegacyResultsFallback(resultsResp)) {
@@ -324,7 +333,7 @@ export async function loadLastJobs(baseUrl, limit = 5) {
     );
     const savedRawId = toCanonicalResultId(saved, "result");
     const savedId = extractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
-    return { ok: true, data: { extractJobs, savedJobId: savedId } };
+    return { ok: true, data: { extractJobs, savedJobId: savedId, nextCursor: null, refreshPending: false }, observability: flowResult.observability || jobsResult.observability || null };
   }
 
   if (!jobsResult.ok) {
@@ -384,7 +393,7 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   );
   const savedRawId = toCanonicalResultId(saved, "result");
   const savedId = dedupedExtractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
-  return { ok: true, data: { extractJobs: dedupedExtractJobs, savedJobId: savedId } };
+  return { ok: true, data: { extractJobs: dedupedExtractJobs, savedJobId: savedId, nextCursor: null, refreshPending: false } };
 }
 
 /**
@@ -455,6 +464,71 @@ export async function loadJobSummary(baseUrl, jobOrFlowId) {
       kind: String(summary.kind || "")
         .trim()
         .toLowerCase(),
+    },
+  };
+}
+
+/**
+ * Diagnóstico operativo de un job o flow.
+ */
+export async function loadJobDebug(baseUrl, jobOrFlowId) {
+  if (!isSecureApiBase(baseUrl)) {
+    const message = "La API debe usar HTTPS.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: {
+        code: "HTTPS_REQUIRED",
+        message,
+        status: 0,
+      },
+    };
+  }
+  const rawId = String(jobOrFlowId || "").trim();
+  const resultId = toCanonicalResultId(rawId, "result");
+  if (!resultId) {
+    const message = "Falta result_id para consultar el diagnóstico.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: {
+        code: "RESULT_ID_REQUIRED",
+        message,
+        status: 404,
+      },
+    };
+  }
+  const parsed = parseScopedEntityId(resultId, "result");
+  const path = parsed.type === "flow" ? API_PATHS.flowDebug(resultId) : API_PATHS.jobDebug(resultId);
+  const result = await apiFetch(baseUrl, path);
+  if (!result.ok) {
+    const error = buildServiceError(result, "RESULT_DEBUG_FAILED", "No se pudo cargar el diagnóstico del resultado.");
+    return {
+      ok: false,
+      errorMessage: error.message,
+      error,
+    };
+  }
+  const debugData = unwrapApiData(result.data);
+  if (!debugData || typeof debugData !== "object") {
+    const message = "El diagnóstico no cumple el contrato esperado.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: {
+        code: "INVALID_RESPONSE_SCHEMA",
+        message,
+        status: 500,
+      },
+    };
+  }
+  return {
+    ok: true,
+    data: {
+      ...debugData,
+      id: resultId,
+      status: normalizeJobStatus(debugData.status),
+      kind: String(debugData.kind || "").trim().toLowerCase(),
     },
   };
 }
@@ -575,7 +649,10 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
             kind: String(data?.active_work?.kind || "followings_flow"),
             status: normalizeJobStatus(data?.active_work?.status || "running"),
           },
+          nextCursor: String(data?.next_cursor || "").trim() || null,
+          refreshPending: !!data?.refresh_pending,
         },
+        observability: result.observability || null,
       };
     }
 
@@ -605,7 +682,10 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
       ok: true,
       data: {
         jobsWithPending,
+        nextCursor: String(data?.next_cursor || "").trim() || null,
+        refreshPending: !!data?.refresh_pending,
       },
+      observability: result.observability || null,
     };
   } catch {
     const message = "Error de red al cargar resultados.";
@@ -617,6 +697,81 @@ export async function loadRecipientsJobsForSend(baseUrl, fromAccount = "") {
         message,
         status: 0,
       },
+    };
+  }
+}
+
+export async function loadRecipientSourceRecipientsPage(
+  baseUrl,
+  sourceId,
+  { limit = 100, cursor = null, query = "", fromAccount = "" } = {}
+) {
+  const base = (baseUrl || "").trim().replace(/\/$/, "");
+  if (!base) {
+    const message = "Configurá la conexión en Opciones.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: { code: "API_BASE_REQUIRED", message, status: 0 },
+    };
+  }
+  if (!isSecureApiBase(base)) {
+    const message = "La API debe usar HTTPS.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: { code: "HTTPS_REQUIRED", message, status: 0 },
+    };
+  }
+  const id = toCanonicalSourceId(sourceId, "job");
+  if (!id) {
+    const message = "source_id inválido";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: { code: "SOURCE_ID_REQUIRED", message, status: 400 },
+    };
+  }
+  const params = new URLSearchParams({ limit: String(Math.max(1, Math.min(Number(limit || 100) || 100, 250))) });
+  const normalizedCursor = String(cursor || "").trim().toLowerCase();
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const normalizedFrom = String(fromAccount || "").trim().toLowerCase();
+  if (normalizedCursor) params.set("cursor", normalizedCursor);
+  if (normalizedQuery) params.set("query", normalizedQuery);
+  if (normalizedFrom) params.set("from_account", normalizedFrom);
+  const path = `${API_PATHS.recipientSourceRecipients(id)}?${params.toString()}`;
+  try {
+    const result = await apiFetch(base, path);
+    if (!result.ok) {
+      const error = buildServiceError(
+        result,
+        "RECIPIENT_SOURCE_RECIPIENTS_FAILED",
+        "Error al cargar destinatarios."
+      );
+      return { ok: false, errorMessage: error.message, error };
+    }
+    const data = unwrapApiData(result.data);
+    return {
+      ok: true,
+      data: {
+        sourceId: String(data?.source_id || id),
+        sourceKind: String(data?.source_kind || ""),
+        usernames: Array.isArray(data?.usernames) ? data.usernames.map((u) => String(u || "").trim()).filter(Boolean) : [],
+        total: Number(data?.total || 0) || 0,
+        pendingCount: Number(data?.pending_count || 0) || 0,
+        matchedCount: Number(data?.matched_count || 0) || 0,
+        hasMore: !!data?.has_more,
+        nextCursor: String(data?.next_cursor || "").trim() || null,
+        query: String(data?.query || normalizedQuery || "").trim() || "",
+      },
+      observability: result.observability || null,
+    };
+  } catch {
+    const message = "Error de red al cargar destinatarios.";
+    return {
+      ok: false,
+      errorMessage: message,
+      error: { code: "NETWORK_ERROR", message, status: 0 },
     };
   }
 }

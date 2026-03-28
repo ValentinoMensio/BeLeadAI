@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/jobs-ws-ping.event.schema.json",
+  "title": "Jobs websocket ping event",
+  "type": "object",
+  "required": ["type", "event_id"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "ping"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

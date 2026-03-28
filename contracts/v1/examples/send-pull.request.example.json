@@ -1,0 +1,7 @@
+{
+  "schema": "../send-pull.request.schema.json",
+  "payload": {
+    "limit": 1,
+    "from_account": "sender_account"
+  }
+}

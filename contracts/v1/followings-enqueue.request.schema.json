@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/followings-enqueue.request.schema.json",
+  "title": "POST /ext/v2/followings/enqueue request",
+  "type": "object",
+  "required": ["from_account", "target_username", "limit", "analysis_depth_mode", "idempotency_key", "idempotency_version"],
+  "properties": {
+    "from_account": { "type": "string", "minLength": 1 },
+    "target_username": { "type": "string", "minLength": 1 },
+    "limit": { "type": ["integer", "number"], "minimum": 1 },
+    "analysis_depth_mode": { "type": "string", "enum": ["all", "only_rubros"] },
+    "deep_rubros": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "idempotency_version": { "type": ["integer", "number"], "const": 2 }
+  },
+  "additionalProperties": false
+}

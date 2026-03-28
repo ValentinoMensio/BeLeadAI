@@ -27,6 +27,8 @@ export const API_PATHS = {
   flows: withExt("/flows"),
   results: withExt("/results"),
   resultSummary: (id) => withExt(`/results/${encodeSegment(id)}/summary`),
+  jobDebug: (id) => withExt(`/jobs/${encodeSegment(id)}/debug`),
+  flowDebug: (id) => withExt(`/flows/${encodeSegment(id)}/debug`),
   recipientSources: withExt("/recipient-sources"),
   recipientSourceRecipients: (sourceId) =>
     withExt(`/recipient-sources/${encodeSegment(sourceId)}/recipients`),

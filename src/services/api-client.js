@@ -121,6 +121,14 @@ function buildApiError(status, data, fallbackMessage = "Error de la API.", resp 
   };
 }
 
+function extractObservabilityHeaders(resp) {
+  return {
+    traceId: String(resp?.headers?.get?.("x-trace-id") || "").trim() || null,
+    requestId: String(resp?.headers?.get?.("x-request-id") || "").trim() || null,
+    traceparent: String(resp?.headers?.get?.("traceparent") || "").trim() || null,
+  };
+}
+
 function isSecureApiBase(baseUrl) {
   try {
     const u = new URL((baseUrl || "").trim());
@@ -365,6 +373,7 @@ export async function apiFetch(baseUrl, path, options = {}) {
       if (to) clearTimeout(to);
       const text = await resp.text();
       const data = parseJsonSafe(text, { raw: text });
+      const observability = extractObservabilityHeaders(resp);
       if (!resp.ok) {
         if (isUpdateRequiredError(resp.status, data)) {
           persistVersionBlockState(resp.status, data);
@@ -392,14 +401,14 @@ export async function apiFetch(baseUrl, path, options = {}) {
         }
         const errorMessage = toUserApiErrorMessage(resp.status, data, text, retrySec);
         const error = buildApiError(resp.status, data, errorMessage, resp);
-        return { ok: false, status: resp.status, data, errorMessage, error };
+        return { ok: false, status: resp.status, data, errorMessage, error, observability };
       }
       markRequestSuccess(methodUpper, pathForGrouping);
       clearVersionBlockState();
       if (readCacheKey && shouldCacheReadResponse(methodUpper, requestGroup, resp.status)) {
         putReadCacheEntry(readCacheKey, requestGroup, resp.status, data);
       }
-      return { ok: true, data, status: resp.status };
+      return { ok: true, data, status: resp.status, observability };
     } catch (e) {
       if (to) clearTimeout(to);
       if (e?.name === "AbortError") {
@@ -415,7 +424,7 @@ export async function apiFetch(baseUrl, path, options = {}) {
           { error: { code: "REQUEST_TIMEOUT" } },
           "La solicitud tardó demasiado."
         );
-        return { ok: false, status: 0, errorMessage: error.message, error };
+        return { ok: false, status: 0, errorMessage: error.message, error, observability: { traceId: null, requestId: null, traceparent: null } };
       }
       const msg = (e?.message || String(e)).toLowerCase();
       const errorMessage = msg.includes("cors")
@@ -431,7 +440,7 @@ export async function apiFetch(baseUrl, path, options = {}) {
         }
       }
       const error = buildApiError(0, { error: { code: "NETWORK_ERROR" } }, errorMessage);
-      return { ok: false, status: 0, errorMessage: error.message, error };
+      return { ok: false, status: 0, errorMessage: error.message, error, observability: { traceId: null, requestId: null, traceparent: null } };
     }
   });
 }

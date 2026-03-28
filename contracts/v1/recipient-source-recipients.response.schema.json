@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/recipient-source-recipients.response.schema.json",
+  "title": "GET /ext/v2/recipient-sources/{id}/recipients success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["usernames"],
+      "properties": {
+        "usernames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_id": {
+          "type": ["string", "null"]
+        },
+        "source_kind": {
+          "type": ["string", "null"]
+        },
+        "total": {
+          "type": ["number", "integer", "null"]
+        },
+        "pending_count": {
+          "type": ["number", "integer", "null"]
+        },
+        "matched_count": {
+          "type": ["number", "integer", "null"]
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "type": ["string", "null"]
+        },
+        "query": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

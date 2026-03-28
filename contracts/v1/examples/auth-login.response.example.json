@@ -1,0 +1,11 @@
+{
+  "schema": "../auth-login.response.schema.json",
+  "payload": {
+    "data": {
+      "access_token": "access-token-redacted",
+      "refresh_token": "refresh-token-redacted",
+      "access_expires_at": 1767225600000,
+      "device_id": "00000000-0000-4000-8000-000000000111"
+    }
+  }
+}

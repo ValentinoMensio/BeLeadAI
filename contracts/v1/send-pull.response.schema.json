@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/send-pull.response.schema.json",
+  "title": "POST /api/send/pull success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["job_id", "task_id", "lease_proof", "payload"],
+            "properties": {
+              "job_id": { "type": "string" },
+              "task_id": { "type": "string" },
+              "lease_proof": { "type": "string" },
+              "dest_username": { "type": ["string", "null"] },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "target_username": { "type": ["string", "null"] },
+                  "message_template": { "type": ["string", "null"] },
+                  "message": { "type": ["string", "null"] },
+                  "dry_run": { "type": "boolean" }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

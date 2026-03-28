@@ -102,8 +102,8 @@
               />Cuotas del plan
             </p>
             <p class="hint hint-no-top hint-bottom-md">
-              Tu plan limita el total. La cuenta en pestaña se detecta por cookie (ds_user_id) en
-              Instagram.
+              Tu plan limita el total. La cuenta en pestaña se detecta automáticamente en
+              Instagram (username o id de sesión).
             </p>
             <div id="quotas_loading" class="status-line">Probá la API para ver tus cuotas.</div>
             <div id="quotas_content" class="is-hidden">
@@ -219,7 +219,7 @@
               <img class="save-icon-img" src="icons/savew.svg" alt="" aria-hidden="true" />Guardar
               configuración
             </button>
-            <div class="status-line" id="save_status">—</div>
+            <div class="status-line" id="save_status" role="status" aria-live="polite">—</div>
           </div>
         </div>
 

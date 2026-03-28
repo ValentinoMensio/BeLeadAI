@@ -1,0 +1,18 @@
+{
+  "schema": "../send-enqueue.request.schema.json",
+  "payload": {
+    "from_account": "sender_account",
+    "usernames": ["alice.demo", "bob.demo"],
+    "message_template": "Hola {{first_name}}, vi tu perfil y queria contactarte.",
+    "message_template_hash": "hash-demo-message",
+    "idempotency_key": "f3c1f1df-demo-send",
+    "idempotency_version": 2,
+    "recipient_idempotency_keys": {
+      "alice.demo": "recipient-hash-a",
+      "bob.demo": "recipient-hash-b"
+    },
+    "source_job_id": "flow:job_123",
+    "dry_run": true,
+    "use_ai": false
+  }
+}

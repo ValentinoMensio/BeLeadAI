@@ -32,6 +32,31 @@
     const SEND_WS_TICKET_PATH = "/api/send/ws-ticket";
     const JOBS_WS_PATH = "/ext/v2/jobs/ws";
     const JOBS_WS_TICKET_PATH = "/ext/v2/jobs/ws-ticket";
+    const runtimeSendMessage =
+      typeof chrome?.runtime?.sendMessage === "function"
+        ? chrome.runtime.sendMessage.bind(chrome.runtime)
+        : null;
+
+    function isIgnorableRuntimeMessageError(error) {
+      const msg = String(error?.message || error || "").toLowerCase();
+      return (
+        msg.includes("receiving end does not exist") ||
+        msg.includes("could not establish connection") ||
+        msg.includes("message port closed before a response was received")
+      );
+    }
+
+    async function safeRuntimeSendMessage(payload) {
+      if (!runtimeSendMessage) return null;
+      try {
+        return await runtimeSendMessage(payload);
+      } catch (e) {
+        if (isIgnorableRuntimeMessageError(e)) {
+          return null;
+        }
+        throw e;
+      }
+    }
 
     async function fetchWithTimeout(url, options = {}, timeoutMs = WS_TICKET_FETCH_TIMEOUT_MS) {
       const controller = new AbortController();
@@ -373,9 +398,13 @@
                 }
                 return;
               }
-              chrome.runtime
-                .sendMessage({ type: event.type, payload: event.payload, event_id: event.eventId })
-                .catch(() => {});
+              safeRuntimeSendMessage({
+                type: event.type,
+                payload: event.payload,
+                event_id: event.eventId,
+              }).catch((e) => {
+                console.warn("[BG] jobs WS runtime notify failed:", e?.message || e);
+              });
             } catch {}
           };
           jobsWs.onclose = (ev) => {

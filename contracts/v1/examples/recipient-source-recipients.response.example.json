@@ -1,0 +1,16 @@
+{
+  "schema": "../recipient-source-recipients.response.schema.json",
+  "payload": {
+    "data": {
+      "source_id": "job_123",
+      "source_kind": "followings_flow",
+      "usernames": ["alice.demo", "bob.demo", "charlie.demo"],
+      "total": 24,
+      "pending_count": 24,
+      "matched_count": 3,
+      "has_more": true,
+      "next_cursor": "charlie.demo",
+      "query": "demo"
+    }
+  }
+}

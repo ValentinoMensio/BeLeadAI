@@ -5,9 +5,9 @@ Esta extension se distribuye de forma privada para clientes autenticados.
 ## Datos procesados por la extension
 
 - Configuracion de API (`api_base`) y preferencias de interfaz.
-- API key en `chrome.storage.session` (solo sesion del navegador).
-- Access JWT en `chrome.storage.session`.
-- Sesion persistente opcional gestionada por cookies seguras del backend (`HttpOnly`, `Secure`) cuando el usuario activa "Mantener sesion iniciada".
+- La API key se usa desde la UI de opciones para iniciar sesion y no se persiste en el repositorio.
+- Access token en `chrome.storage.session`.
+- Refresh token cifrado en `chrome.storage.local`, derivado del `device_id` de la extension, para renovar la sesion sin exponerlo en texto plano.
 - Identificador de cuenta de Instagram (`ds_user_id`) para ruteo de sender.
 - Usernames destino y estado de tareas de envio para ejecutar el flujo.
 
@@ -23,7 +23,8 @@ Esta extension se distribuye de forma privada para clientes autenticados.
 
 ## Retencion
 
-- La API key persiste solo en la sesion activa del navegador.
+- El access token vive en sesion del navegador.
+- El refresh token cifrado persiste localmente hasta logout o revocacion remota.
 - Los caches de estado de trabajos son temporales y acotados para confiabilidad operativa.
 
 ## Controles de seguridad

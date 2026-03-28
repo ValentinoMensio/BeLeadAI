@@ -12,7 +12,8 @@ Este proyecto esta pensado para codigo fuente publico y operacion en infraestruc
 
 - API base obligatoriamente por HTTPS.
 - WebSocket solo por WSS.
-- API key y access token se guardan en almacenamiento de sesion del navegador.
+- Access token en `chrome.storage.session`.
+- Refresh token cifrado en `chrome.storage.local` con clave derivada del `device_id` local.
 - El JWT no se envia por query string.
 - Los permisos de host de API se conceden por dominio configurado.
 

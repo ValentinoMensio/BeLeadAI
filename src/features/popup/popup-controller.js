@@ -15,9 +15,23 @@ import {
   loadJobSummary,
   cancelJob as cancelJobService,
   loadRecipientsJobsForSend as loadRecipientsJobsService,
+  loadRecipientSourceRecipientsPage,
 } from "../../services/jobs-service.js";
 import { ensureJobsWsConnected, subscribeJobsUpdated } from "../../services/ws-jobs-service.js";
-import { getState, setState } from "./state/popup-store.js";
+import {
+  getState,
+  setState,
+  getSelectedRecipientUsernames,
+  getSelectedRecipientSet,
+  getSelectedRecipientCount,
+  isRecipientSelected,
+  setSelectedRecipients,
+  clearSelectedRecipients,
+  toggleSelectedRecipient,
+  selectAllRecipients,
+  clearSendRecipientContext,
+  setSendRecipientContext,
+} from "./state/popup-store.js";
 import { qs, qsa } from "../../shared/utils/dom.js";
 import {
   formatJobDate,
@@ -45,6 +59,7 @@ const DM_STATUS_UI_REFRESH_MIN_MS = 2500;
 const WS_SYNC_DEBOUNCE_MS = 1200;
 const WS_SYNC_FETCH_MIN_MS = 6000;
 const WS_SYNC_SEND_MIN_MS = 6000;
+const WS_SYNC_SEND_RECIPIENTS_MIN_MS = 4000;
 
 function setStatus(msg, isErr = false) {
   const el = qs("#status");
@@ -179,7 +194,20 @@ function hideUpdateRequiredScreen() {
 }
 
 function buildDeps() {
-  const store = { getState, setState };
+  const store = {
+    getState,
+    setState,
+    getSelectedRecipientUsernames,
+    getSelectedRecipientSet,
+    getSelectedRecipientCount,
+    isRecipientSelected,
+    setSelectedRecipients,
+    clearSelectedRecipients,
+    toggleSelectedRecipient,
+    selectAllRecipients,
+    clearSendRecipientContext,
+    setSendRecipientContext,
+  };
   const services = {
     loadSettings,
     saveSettings,
@@ -192,6 +220,7 @@ function buildDeps() {
     loadJobSummary,
     cancelJobService,
     loadRecipientsJobsService,
+    loadRecipientSourceRecipientsPage,
     ensureJobsWsConnected,
     subscribeJobsUpdated,
   };
@@ -393,12 +422,19 @@ export async function init() {
     tabs.forEach((tab) => {
       const onTabClick = async () => {
         const targetId = `tab-${tab.dataset.tab}`;
-        tabs.forEach((t) => t.classList.remove("active"));
-        contents.forEach((c) => c.classList.remove("active"));
-        tab.classList.add("active");
+        tabs.forEach((t) => {
+          const isActive = t === tab;
+          t.classList.toggle("active", isActive);
+          t.setAttribute("aria-selected", isActive ? "true" : "false");
+          t.tabIndex = isActive ? 0 : -1;
+        });
+        contents.forEach((c) => {
+          const isTarget = c.id === targetId;
+          c.classList.toggle("active", isTarget);
+          c.hidden = !isTarget;
+        });
         const targetContent = qs(`#${targetId}`);
         if (targetContent) {
-          targetContent.classList.add("active");
           targetContent.scrollIntoView({ block: "nearest", behavior: "instant" });
         }
         if (tab.dataset.tab !== "send") {
@@ -460,6 +496,7 @@ export async function init() {
   let wsSyncInFlight = false;
   let lastWsFetchSyncTs = 0;
   let lastWsSendSyncTs = 0;
+  let lastWsSendRecipientsSyncTs = 0;
 
   function activeTabName() {
     return String(document.querySelector(".tab.active")?.dataset?.tab || "")
@@ -529,10 +566,18 @@ export async function init() {
             renderJobDetails(null, stats, sel?.selectedOptions?.[0]?.dataset?.kind || "");
           }
         }
+        if (now - lastWsSendRecipientsSyncTs >= WS_SYNC_SEND_RECIPIENTS_MIN_MS) {
+          lastWsSendRecipientsSyncTs = now;
+          await sendApi.refreshRecipients(true);
+        }
       }
       if (tab === "send" && now - lastWsSendSyncTs >= WS_SYNC_SEND_MIN_MS) {
         lastWsSendSyncTs = now;
         await sendApi.refreshSendProgress();
+        if (now - lastWsSendRecipientsSyncTs >= WS_SYNC_SEND_RECIPIENTS_MIN_MS) {
+          lastWsSendRecipientsSyncTs = now;
+          await sendApi.refreshRecipients(true);
+        }
       }
     } finally {
       wsSyncInFlight = false;

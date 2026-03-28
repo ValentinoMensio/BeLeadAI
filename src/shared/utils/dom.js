@@ -15,11 +15,6 @@ export function setText(el, text) {
   if (el) el.textContent = text ?? "";
 }
 
-export function setHtmlSafe(el, html) {
-  if (!el) return;
-  el.innerHTML = html ?? "";
-}
-
 export function escapeHtml(str) {
   if (str == null) return "";
   const s = String(str);

@@ -1,0 +1,10 @@
+{
+  "schema": "../send-heartbeat.request.schema.json",
+  "payload": {
+    "sender_instance_id": "sender-instance-demo",
+    "from_account": "sender_account",
+    "autonomous": false,
+    "sender_running": true,
+    "ig_account_detected": true
+  }
+}

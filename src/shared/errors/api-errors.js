@@ -78,6 +78,16 @@ function pickCount(details, keys) {
   return null;
 }
 
+function pickMaxCount(details, keys) {
+  let max = null;
+  for (const key of keys) {
+    const val = toCountOrNull(details?.[key]);
+    if (val == null) continue;
+    if (max == null || val > max) max = val;
+  }
+  return max;
+}
+
 function resolveDailyLeadCounts(details) {
   const sent =
     pickCount(details, [
@@ -89,7 +99,7 @@ function resolveDailyLeadCounts(details) {
       "sent_followings",
     ]) ?? 0;
 
-  const pendingDirect = pickCount(details, [
+  const pendingDirect = pickMaxCount(details, [
     "pending_followings",
     "pending_to_send",
     "pending_leads",
@@ -118,9 +128,8 @@ function resolveDailyLeadCounts(details) {
     pickCount(details, ["requested_to_send", "requested_send", "requested_limit", "requested"]) ??
     0;
 
-  const usedToday =
-    pickCount(details, ["used_today", "consumed_today", "messages_used_today"]) ??
-    Math.max(0, sent + pending);
+  const explicitUsedToday = pickMaxCount(details, ["used_today", "consumed_today", "messages_used_today"]);
+  const usedToday = explicitUsedToday != null ? Math.max(explicitUsedToday, sent + pending) : Math.max(0, sent + pending);
 
   const dailyLimit =
     pickCount(details, ["limit", "daily_limit", "safety_messages_per_day", "daily_cap"]) ?? null;
@@ -172,14 +181,11 @@ function formatAnalyzeToSendDailyMessage(details, action = "generic") {
     sent +
     " · pendientes: " +
     pending +
-    "). " +
-    "Pendientes: " +
-    pending +
     " · " +
     requestedLabel +
     ": " +
     requestedNow +
-    "."
+    ")."
   );
 }
 
@@ -206,6 +212,33 @@ function formatLegacyLeadsInsufficientMessage(errMessage, action = "generic") {
     requestedNow +
     "."
   );
+}
+
+function formatFollowingsDailyQuotaMessage(details) {
+  const requestedNow = pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
+  const usedToday = pickCount(details, ["used_today", "consumed_today", "followings_used_today"]) ?? 0;
+  const dailyLimit =
+    pickCount(details, ["limit", "daily_limit", "plan_followings_per_day", "safety_messages_per_day"]) ?? null;
+  const remaining = pickCount(details, ["remaining", "remaining_today"]) ?? null;
+  const usedLabel = dailyLimit != null ? `${usedToday}/${dailyLimit}` : String(usedToday);
+  let message = `Límite diario de followings alcanzado. Cupo usado hoy: ${usedLabel}.`;
+  if (requestedNow > 0) message += ` Solicitados ahora: ${requestedNow}.`;
+  if (remaining != null) message += ` Disponibles hoy: ${remaining}.`;
+  return message;
+}
+
+function formatFollowingsMonthlyQuotaMessage(details) {
+  const requestedNow = pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
+  const usedThisMonth =
+    pickCount(details, ["followings_jobs_this_month", "used_this_month", "consumed_this_month"]) ?? 0;
+  const monthlyLimit =
+    pickCount(details, ["plan_followings_per_month", "monthly_limit", "limit"]) ?? null;
+  const remaining = pickCount(details, ["remaining_this_month", "remaining"]) ?? null;
+  const usedLabel = monthlyLimit != null ? `${usedThisMonth}/${monthlyLimit}` : String(usedThisMonth);
+  let message = `Límite mensual de followings alcanzado. Cupo usado este mes: ${usedLabel}.`;
+  if (requestedNow > 0) message += ` Solicitados ahora: ${requestedNow}.`;
+  if (remaining != null) message += ` Disponibles este mes: ${remaining}.`;
+  return message;
 }
 
 function formatBlockingQuotaError(data, rawText = "") {
@@ -277,6 +310,15 @@ function formatFollowingsQuotaError(data, rawText = "") {
   const err = data && data.error;
   if (!err) return null;
   const details = err.details || {};
+  const blockingQuota = String(details.blocking_quota || "")
+    .trim()
+    .toLowerCase();
+  if (blockingQuota === "followings_daily") {
+    return formatFollowingsDailyQuotaMessage(details);
+  }
+  if (blockingQuota === "plan_followings_monthly") {
+    return formatFollowingsMonthlyQuotaMessage(details);
+  }
   const action = resolveQuotaAction(details, err.message, rawText);
   const hasCountLikeDetail =
     details.requested != null ||

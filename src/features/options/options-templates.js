@@ -1,40 +1,108 @@
-export function renderPendingLinkAccountCard(tabAccount, limitStr, resetText, escapeHtml) {
-  return (
-    '<div class="account-name"><img class="quotas-account-icon-img" src="icons/user.svg" alt="" aria-hidden="true" />' +
-    escapeHtml(tabAccount) +
-    ' <span style="color:var(--muted);font-weight:400;font-size:11px;">(en pestaña, aún no enlazada)</span></div>' +
-    '<div class="quotas-row"><span class="quotas-label">24h</span><div class="quotas-progress-wrap"><div class="progress"><div style="width:0%"></div></div></div><span class="quotas-value">0 / ' +
-    limitStr +
-    "</span></div>" +
-    '<div class="progress-text">' +
-    escapeHtml(resetText) +
-    "</div>"
+function createIcon(src) {
+  const icon = document.createElement("img");
+  icon.className = "quotas-account-icon-img";
+  icon.src = src;
+  icon.alt = "";
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
+}
+
+function appendText(parent, text) {
+  parent.appendChild(document.createTextNode(String(text || "")));
+}
+
+function createAccountName(nameText, suffixText = "") {
+  const name = document.createElement("div");
+  name.className = "account-name";
+  name.appendChild(createIcon("icons/user.svg"));
+  appendText(name, nameText);
+  if (suffixText) {
+    const suffix = document.createElement("span");
+    suffix.style.color = "var(--muted)";
+    suffix.style.fontWeight = "400";
+    suffix.style.fontSize = "11px";
+    suffix.textContent = suffixText;
+    name.appendChild(document.createTextNode(" "));
+    name.appendChild(suffix);
+  }
+  return name;
+}
+
+function createQuotaRow({ label, valueText, fillId = "", wrapId = "", width = "0%" }) {
+  const row = document.createElement("div");
+  row.className = "quotas-row";
+
+  const quotaLabel = document.createElement("span");
+  quotaLabel.className = "quotas-label";
+  quotaLabel.textContent = label;
+
+  const progressWrap = document.createElement("div");
+  progressWrap.className = "quotas-progress-wrap";
+
+  const progress = document.createElement("div");
+  progress.className = "progress";
+  if (wrapId) progress.id = wrapId;
+
+  const fill = document.createElement("div");
+  if (fillId) fill.id = fillId;
+  fill.style.width = width;
+
+  progress.appendChild(fill);
+  progressWrap.appendChild(progress);
+
+  const quotaValue = document.createElement("span");
+  quotaValue.className = "quotas-value";
+  quotaValue.textContent = valueText;
+
+  row.append(quotaLabel, progressWrap, quotaValue);
+  return row;
+}
+
+function createProgressText(text) {
+  const el = document.createElement("div");
+  el.className = "progress-text";
+  el.textContent = text;
+  return el;
+}
+
+export function renderPendingLinkAccountCard(tabAccount, limitStr, resetText) {
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(createAccountName(tabAccount, "(en pestaña, aún no enlazada)"));
+  fragment.appendChild(
+    createQuotaRow({
+      label: "24h",
+      valueText: `0 / ${limitStr}`,
+      width: "0%",
+    })
   );
+  fragment.appendChild(createProgressText(resetText));
+  return fragment;
 }
 
 export function renderNoLinkedAccountsCard() {
-  return (
-    '<div class="account-name"><img class="quotas-account-icon-img" src="icons/user.svg" alt="" aria-hidden="true" />Ninguna cuenta enlazada</div>' +
-    '<div class="progress-text">Enviá un mensaje desde el popup para enlazar la cuenta de la pestaña (cookie).</div>'
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(createAccountName("Ninguna cuenta enlazada"));
+  fragment.appendChild(
+    createProgressText(
+      "Enviá un mensaje desde el popup para enlazar la cuenta detectada en la pestaña."
+    )
   );
+  return fragment;
 }
 
-export function renderQuotaAccountCard(name, used, limitStr, resetText, barId, escapeHtml) {
-  return (
-    '<div class="account-name"><img class="quotas-account-icon-img" src="icons/user.svg" alt="" aria-hidden="true" />' +
-    (name.indexOf("@") === 0 ? escapeHtml(name) : "@" + escapeHtml(name)) +
-    "</div>" +
-    '<div class="quotas-row"><span class="quotas-label">24h</span><div class="quotas-progress-wrap"><div class="progress" id="' +
-    barId +
-    '_wrap"><div id="' +
-    barId +
-    '"></div></div></div><span class="quotas-value">' +
-    used +
-    " / " +
-    limitStr +
-    "</span></div>" +
-    '<div class="progress-text">' +
-    escapeHtml(resetText) +
-    "</div>"
+export function renderQuotaAccountCard(name, used, limitStr, resetText, barId) {
+  const fragment = document.createDocumentFragment();
+  const normalizedName = String(name || "").startsWith("@") ? String(name || "") : `@${name}`;
+  fragment.appendChild(createAccountName(normalizedName));
+  fragment.appendChild(
+    createQuotaRow({
+      label: "24h",
+      valueText: `${used} / ${limitStr}`,
+      fillId: barId,
+      wrapId: `${barId}_wrap`,
+      width: "0%",
+    })
   );
+  fragment.appendChild(createProgressText(resetText));
+  return fragment;
 }

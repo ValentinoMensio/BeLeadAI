@@ -1,0 +1,12 @@
+{
+  "schema": "../followings-enqueue.request.schema.json",
+  "payload": {
+    "from_account": "sender_account",
+    "target_username": "target_account",
+    "limit": 150,
+    "analysis_depth_mode": "only_rubros",
+    "deep_rubros": ["salud", "tech"],
+    "idempotency_key": "f3c1f1df-demo-followings",
+    "idempotency_version": 2
+  }
+}

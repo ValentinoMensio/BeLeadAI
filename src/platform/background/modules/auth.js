@@ -5,6 +5,7 @@
     const AUTH_FETCH_TIMEOUT_MS = 15000;
     const ACCESS_SKEW_MS = 90 * 1000;
     const REFRESH_RETRY_ATTEMPTS = 3;
+    const LEGACY_AUTH_STORAGE_KEYS = ["jwt" + "_token", "jwt" + "_expires_at"];
 
     function parseRetryAfterMs(resp) {
       const raw = String(resp?.headers?.get?.("Retry-After") || "").trim();
@@ -56,7 +57,7 @@
       }
     }
 
-    function readJwtExpMs(token) {
+    function readAccessTokenExpMs(token) {
       const raw = String(token || "").trim();
       if (!raw) return 0;
       const parts = raw.split(".");
@@ -75,7 +76,7 @@
     }
 
     function resolveExpiresAtMs(token, expiresInSeconds, fallbackMs = 0) {
-      const expFromToken = readJwtExpMs(token);
+      const expFromToken = readAccessTokenExpMs(token);
       const expFromApi =
         Number(expiresInSeconds || 0) > 0 ? Date.now() + Number(expiresInSeconds) * 1000 : 0;
       if (expFromToken && expFromApi) return Math.min(expFromToken, expFromApi);
@@ -169,10 +170,10 @@
       return (cfg.client_id || "").trim();
     }
 
-    function isJwtValid(cfg) {
+    function isAccessTokenValid(cfg) {
       const token = String(cfg?.access_token || "").trim();
       if (!token) return false;
-      const expMs = readJwtExpMs(token) || Number(cfg?.access_expires_at || 0) || 0;
+      const expMs = readAccessTokenExpMs(token) || Number(cfg?.access_expires_at || 0) || 0;
       return expMs > Date.now() + ACCESS_SKEW_MS;
     }
 
@@ -207,14 +208,14 @@
         patch.device_id = fallbackDeviceId;
       }
       await storageModule.setAuthState(patch);
-      await chrome.storage.local.remove(["jwt_token", "jwt_expires_at"]);
+      await chrome.storage.local.remove(LEGACY_AUTH_STORAGE_KEYS);
       return accessToken;
     }
 
     async function clearTokensKeepDevice({ rotateSalt = false } = {}) {
       const current = await storageModule.getAuthState();
       await storageModule.clearAuthState({ rotateSalt: !!rotateSalt });
-      await chrome.storage.local.remove(["jwt_token", "jwt_expires_at"]);
+      await chrome.storage.local.remove(LEGACY_AUTH_STORAGE_KEYS);
       if (current.device_id) {
         await storageModule.setAuthState({ device_id: current.device_id });
       }
@@ -334,7 +335,7 @@
     async function ensureFreshAccessToken(cfgInput = null, opts = {}) {
       const force = !!opts.force;
       const cfg = cfgInput || (await loadSettings());
-      if (!force && isJwtValid(cfg)) {
+      if (!force && isAccessTokenValid(cfg)) {
         return String(cfg.access_token || "").trim() || null;
       }
       const now = Date.now();
@@ -378,7 +379,7 @@
       const headers = { "Content-Type": "application/json", ...getClientMetadataHeaders() };
       let accessToken = "";
 
-      if (isJwtValid(cfg)) {
+      if (isAccessTokenValid(cfg)) {
         accessToken = String(cfg.access_token || "").trim();
       } else {
         const token = await ensureFreshAccessToken(cfg);
@@ -398,7 +399,7 @@
     async function getAuthState() {
       const cfg = await loadSettings();
       return {
-        isAuthenticated: !!cfg.access_token && isJwtValid(cfg),
+        isAuthenticated: !!cfg.access_token && isAccessTokenValid(cfg),
         accessExpiresAt: Number(cfg.access_expires_at || 0) || 0,
         clientId: String(cfg.client_id || "").trim(),
         sessionId: String(cfg.session_id || "").trim(),
@@ -470,7 +471,7 @@
       isSecureApiBase,
       loadSettings,
       getClientIdEffective,
-      isJwtValid,
+      isAccessTokenValid,
       getOrCreateDeviceId,
       login,
       loginWithResult,
@@ -480,9 +481,6 @@
       getAuthHeaders,
       logoutDevice,
       logoutAllDevices,
-      getJwtToken: login,
-      refreshJwtToken: refresh,
-      refreshJwtSingleFlight: ensureFreshAccessToken,
     };
   }
 

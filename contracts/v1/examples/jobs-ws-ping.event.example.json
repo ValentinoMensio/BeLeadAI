@@ -1,0 +1,8 @@
+{
+  "schema": "../jobs-ws-ping.event.schema.json",
+  "payload": {
+    "type": "ping",
+    "event_id": "evt_ping_001",
+    "payload": {}
+  }
+}

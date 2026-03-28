@@ -12,7 +12,6 @@ import {
   formatResetDate,
   formatLastUpdate,
 } from "../../../shared/utils/format.js";
-import { escapeHtml } from "../../../shared/utils/dom.js";
 
 const LIMITS_CACHE_KEY = "limits_cache";
 const LIMITS_CACHE_TTL_MS = 45 * 1000;
@@ -23,6 +22,51 @@ let limitsLastFetchTime = 0;
 let currentFromAccount = null;
 let limitsBackoffUntilMs = 0;
 let limitsBackoffStatus = 0;
+
+function clearElement(el) {
+  if (!el) return;
+  el.replaceChildren();
+}
+
+function appendDiv(el, className, text) {
+  const div = document.createElement("div");
+  if (className) div.className = className;
+  div.textContent = text;
+  el.appendChild(div);
+  return div;
+}
+
+function appendDetailLine(el, prefix, strongText, suffix = "") {
+  const line = document.createElement("div");
+  line.className = "detail-line";
+  line.appendChild(document.createTextNode(prefix));
+  const strong = document.createElement("strong");
+  strong.textContent = strongText;
+  line.appendChild(strong);
+  if (suffix) line.appendChild(document.createTextNode(suffix));
+  el.appendChild(line);
+}
+
+function renderAlert(alertEl, { title, line, reset = "", detailType = "" }) {
+  if (!alertEl) return;
+  clearElement(alertEl);
+  alertEl.classList.add("open");
+  appendDiv(alertEl, "alert-title", title);
+  appendDiv(alertEl, "alert-one-line", line);
+  if (reset) appendDiv(alertEl, "alert-reset", reset);
+  if (detailType) {
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "alert-link";
+    link.dataset.detailType = detailType;
+    link.textContent = "Ver detalles";
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      showLimitDetail(detailType);
+    });
+    alertEl.appendChild(link);
+  }
+}
 
 function unwrapApiDataEnvelope(payload) {
   if (!payload || typeof payload !== "object") return {};
@@ -117,7 +161,11 @@ async function fetchLimits(signal = null) {
     let fromAccount = "";
     try {
       const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
-      fromAccount = ((r?.user_id != null ? String(r.user_id) : "") || r?.username || "").trim();
+      const username = String(r?.username || "")
+        .trim()
+        .toLowerCase();
+      const userId = String(r?.user_id || "").trim();
+      fromAccount = username || userId;
     } catch {}
 
     if (!fromAccount) {
@@ -217,15 +265,15 @@ function renderLimitsSummary(data, options = {}) {
     if (alertEl) {
       alertEl.classList.remove("open");
       if (auth401) {
-        alertEl.classList.add("open");
-        alertEl.innerHTML =
-          '<div class="alert-title">⚠️ Sesión expirada</div><div class="alert-one-line">Abrí Opciones y probá la conexión para actualizar.</div>';
+        renderAlert(alertEl, {
+          title: "⚠️ Sesión expirada",
+          line: "Abrí Opciones y probá la conexión para actualizar.",
+        });
       } else if (networkErrorMessage) {
-        alertEl.classList.add("open");
-        alertEl.innerHTML =
-          '<div class="alert-title">⚠️ Error de red</div><div class="alert-one-line">' +
-          escapeHtml(networkErrorMessage) +
-          "</div>";
+        renderAlert(alertEl, {
+          title: "⚠️ Error de red",
+          line: networkErrorMessage,
+        });
       }
     }
     return;
@@ -273,51 +321,49 @@ function renderLimitsSummary(data, options = {}) {
       "blocked-analyses",
       "blocked-hourly"
     );
-    alertEl.innerHTML = "";
+    clearElement(alertEl);
     const dryRunEl = document.getElementById("dry_run");
     const sandboxNote = dryRunEl?.checked ? " Simulando (no se envía realmente)." : "";
     if (blocking === "safety_daily") {
       alertEl.classList.add("open", "blocked-daily");
       const resetIn = formatResetIn(data.reset_at_daily);
-      alertEl.innerHTML =
-        `<div class="alert-title">⛔ Límite diario (seguridad)</div>` +
-        `<div class="alert-one-line">No podés enviar más mensajes hoy.${sandboxNote}</div>` +
-        `<div class="alert-reset">Vuelve en ${resetIn || "—"}</div>` +
-        `<div class="alert-link" data-detail-type="day">Ver detalles</div>`;
+      renderAlert(alertEl, {
+        title: "⛔ Límite diario (seguridad)",
+        line: `No podés enviar más mensajes hoy.${sandboxNote}`,
+        reset: `Vuelve en ${resetIn || "—"}`,
+        detailType: "day",
+      });
     } else if (blocking === "plan_messages_monthly") {
       alertEl.classList.add("open", "blocked-monthly");
       const resetDate = formatResetDate(data.reset_at_monthly);
-      alertEl.innerHTML =
-        `<div class="alert-title">⛔ Cuota mensual agotada</div>` +
-        `<div class="alert-one-line">${usedMonth} / ${planMonth} mensajes este mes.${sandboxNote}</div>` +
-        `<div class="alert-reset">Próximo vencimiento: ${resetDate || "—"}</div>` +
-        `<div class="alert-link" data-detail-type="month">Ver detalles</div>`;
+      renderAlert(alertEl, {
+        title: "⛔ Cuota mensual agotada",
+        line: `${usedMonth} / ${planMonth} mensajes este mes.${sandboxNote}`,
+        reset: `Próximo vencimiento: ${resetDate || "—"}`,
+        detailType: "month",
+      });
     } else if (blocking === "plan_analyses_monthly") {
       const usedAna = data.analyses?.used_this_month ?? 0;
       const limitAna = data.limits?.plan_analyses_per_month ?? 0;
       alertEl.classList.add("open", "blocked-analyses");
-      alertEl.innerHTML =
-        `<div class="alert-title">⛔ Cuota de análisis agotada</div>` +
-        `<div class="alert-one-line">${usedAna} / ${limitAna} análisis este mes.${sandboxNote}</div>` +
-        `<div class="alert-reset">Hasta el próximo ciclo.</div>`;
+      renderAlert(alertEl, {
+        title: "⛔ Cuota de análisis agotada",
+        line: `${usedAna} / ${limitAna} análisis este mes.${sandboxNote}`,
+        reset: "Hasta el próximo ciclo.",
+      });
     } else if (blocking === "messages_hourly") {
       alertEl.classList.add("open", "blocked-hourly");
-      alertEl.innerHTML =
-        `<div class="alert-title">⛔ Límite por hora alcanzado</div>` +
-        `<div class="alert-one-line">Ventana deslizante de 60 min.${sandboxNote}</div>` +
-        `<div class="alert-reset">Reintentá en unos minutos.</div>`;
-    }
-    alertEl.querySelectorAll(".alert-link[data-detail-type]").forEach((link) => {
-      link.addEventListener("click", (e) => {
-        e.preventDefault();
-        const t = link.getAttribute("data-detail-type");
-        if (t) showLimitDetail(t);
+      renderAlert(alertEl, {
+        title: "⛔ Límite por hora alcanzado",
+        line: `Ventana deslizante de 60 min.${sandboxNote}`,
+        reset: "Reintentá en unos minutos.",
       });
-    });
+    }
     if (auth401) {
-      alertEl.classList.add("open");
-      alertEl.innerHTML =
-        '<div class="alert-title">⚠️ Sesión expirada</div><div class="alert-one-line">Abrí Opciones y probá la conexión para actualizar.</div>';
+      renderAlert(alertEl, {
+        title: "⚠️ Sesión expirada",
+        line: "Abrí Opciones y probá la conexión para actualizar.",
+      });
     }
   }
 
@@ -338,7 +384,7 @@ function showLimitDetail(type) {
   if (detailEl.dataset.open === type) {
     detailEl.classList.remove("open", "border-ok", "border-warn", "border-blocked");
     detailEl.dataset.open = "";
-    detailEl.innerHTML = "";
+    clearElement(detailEl);
     return;
   }
   const safetyDaily = limitsData.limits?.safety_messages_per_day;
@@ -373,17 +419,27 @@ function showLimitDetail(type) {
           ? `Se restablece en: ${resetIn}`
           : "—";
     const sentToday = resolveSentToday(limitsData.messages, usedToday);
-    let dayHtml = '<div class="detail-title">Límite diario por cuenta (seguridad)</div>';
-    dayHtml += `<div class="detail-line">Enviados hoy: <strong>${sentToday}</strong> / ${limitToday != null ? limitToday : "∞"}</div>`;
-    dayHtml += `<div class="detail-line reset-in">${escapeHtml(resetLabel)}</div>`;
-    detailEl.innerHTML = dayHtml;
+    clearElement(detailEl);
+    appendDiv(detailEl, "detail-title", "Límite diario por cuenta (seguridad)");
+    appendDetailLine(
+      detailEl,
+      "Enviados hoy: ",
+      String(sentToday),
+      ` / ${limitToday != null ? limitToday : "∞"}`
+    );
+    appendDiv(detailEl, "detail-line reset-in", resetLabel);
   } else {
     const resetDate = formatResetDate(limitsData.reset_at_monthly);
     const monthLimitLabel = limitMonth != null ? String(limitMonth) : "∞";
-    detailEl.innerHTML =
-      `<div class="detail-title">Cuota mensual (plan ${escapeHtml(planName)})</div>` +
-      `<div class="detail-line">Enviados este ciclo: <strong>${usedMonth}</strong> / ${monthLimitLabel}</div>` +
-      `<div class="detail-line reset-in">Próximo vencimiento: ${escapeHtml(resetDate || "—")}</div>`;
+    clearElement(detailEl);
+    appendDiv(detailEl, "detail-title", `Cuota mensual (plan ${planName})`);
+    appendDetailLine(
+      detailEl,
+      "Enviados este ciclo: ",
+      String(usedMonth),
+      ` / ${monthLimitLabel}`
+    );
+    appendDiv(detailEl, "detail-line reset-in", `Próximo vencimiento: ${resetDate || "—"}`);
   }
   detailEl.classList.remove("border-ok", "border-warn", "border-blocked");
   if (borderMap[borderClass]) detailEl.classList.add(borderMap[borderClass]);
@@ -422,6 +478,9 @@ export async function refreshLimitsWithCache(forceRefresh = false) {
   const networkError = result?.errorMessage || null;
   if (data) {
     renderLimitsSummary(data, opts(Date.now()));
+    try {
+      window.dispatchEvent(new CustomEvent("belead:limits-updated"));
+    } catch {}
     const detailEl = document.getElementById("limits-detail");
     if (detailEl?.dataset?.open) showLimitDetail(detailEl.dataset.open);
   } else if (cached?.data) {

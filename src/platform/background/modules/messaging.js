@@ -21,6 +21,7 @@
           "start_sender",
           "stop_sender",
           "get_sender_status",
+          "sender_heartbeat_now",
           "process_now",
           "auth_login",
           "auth_logout",
@@ -41,6 +42,7 @@
             .startSender({
               deferFirstPull: !!message.defer_first_pull,
               allowIdleStart: !!message.allow_idle_start,
+              fromAccountHint: String(message.from_account_hint || ""),
             })
             .then(sendResponse)
             .catch((e) => {
@@ -68,6 +70,29 @@
             .catch((e) => {
               console.warn("[BG] get_sender_status failed:", e?.message || e);
               sendResponse({ status: "error", reason: e?.message || "get_sender_status_failed" });
+            });
+          return true;
+        }
+
+        if (message.action === "sender_heartbeat_now") {
+          const fromAccountHint = String(message.from_account || "");
+          jobsModule
+            .sendSenderHeartbeat(true, fromAccountHint)
+            .then(async (ok) => {
+              let status = null;
+              try {
+                status = await jobsModule.getSenderStatus();
+              } catch {
+                status = null;
+              }
+              sendResponse({
+                ok: !!ok,
+                from_account: String(status?.fromAccount || "").trim().toLowerCase() || null,
+              });
+            })
+            .catch((e) => {
+              console.warn("[BG] sender_heartbeat_now failed:", e?.message || e);
+              sendResponse({ ok: false, reason: e?.message || "sender_heartbeat_now_failed" });
             });
           return true;
         }
@@ -178,25 +203,63 @@
         if (message.action === "get_logged_in_username") {
           (async () => {
             try {
-              const cookie = await chrome.cookies.get({
-                url: "https://www.instagram.com",
-                name: "ds_user_id",
-              });
-              if (cookie?.value) {
-                const user_id = String(cookie.value).trim();
-                sendResponse({
-                  username: null,
-                  user_id,
-                  source: "cookie",
-                  error: null,
-                });
-                return;
-              }
+              const readCookieAccount = async () => {
+                try {
+                  const cookie = await chrome.cookies.get({
+                    url: "https://www.instagram.com",
+                    name: "ds_user_id",
+                  });
+                  const userId = String(cookie?.value || "").trim();
+                  if (!userId) return null;
+                  return {
+                    username: null,
+                    user_id: userId,
+                    source: "cookie",
+                    error: null,
+                  };
+                } catch {
+                  return null;
+                }
+              };
+
               const tabs = await chrome.tabs.query({
                 url: ["https://www.instagram.com/*", "https://instagram.com/*"],
               });
-              const tab = tabs.find((t) => t.active) || tabs[0];
-              if (!tab?.id) {
+              const sortedTabs = (() => {
+                const active = tabs.find((t) => t.active && t.id);
+                if (!active) return tabs;
+                return [active, ...tabs.filter((t) => t?.id !== active.id)];
+              })();
+              for (const tab of sortedTabs) {
+                if (!tab?.id) continue;
+                let r = null;
+                try {
+                  r = await chrome.tabs.sendMessage(tab.id, { action: "get_current_username" });
+                } catch {
+                  continue;
+                }
+                const username = String(r?.username || "")
+                  .trim()
+                  .toLowerCase();
+                const userId = String(r?.user_id || "").trim();
+                if (username || userId) {
+                  sendResponse({
+                    username: username || null,
+                    user_id: userId || null,
+                    source: r?.source || null,
+                    error: null,
+                  });
+                  return;
+                }
+              }
+
+              const cookieAccount = await readCookieAccount();
+              if (cookieAccount) {
+                sendResponse(cookieAccount);
+                return;
+              }
+
+              if (tabs.length === 0) {
                 sendResponse({
                   username: null,
                   user_id: null,
@@ -205,16 +268,35 @@
                 });
                 return;
               }
-              const r = await chrome.tabs.sendMessage(tab.id, { action: "get_current_username" });
-              const hasAccount = !!(r?.username || r?.user_id);
+
               sendResponse({
-                username: r?.username || null,
-                user_id: r?.user_id || null,
-                source: r?.source || null,
-                error: hasAccount ? null : "not_detected",
+                username: null,
+                user_id: null,
+                source: null,
+                error: "account_not_detected",
               });
             } catch (e) {
               console.warn("[BeLeadAI BG] get_logged_in_username:", e);
+              let cookieAccount = null;
+              try {
+                const cookie = await chrome.cookies.get({
+                  url: "https://www.instagram.com",
+                  name: "ds_user_id",
+                });
+                const userId = String(cookie?.value || "").trim();
+                if (userId) {
+                  cookieAccount = {
+                    username: null,
+                    user_id: userId,
+                    source: "cookie",
+                    error: null,
+                  };
+                }
+              } catch {}
+              if (cookieAccount) {
+                sendResponse(cookieAccount);
+                return;
+              }
               sendResponse({
                 username: null,
                 user_id: null,

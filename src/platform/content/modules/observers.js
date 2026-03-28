@@ -171,12 +171,12 @@
         const composerVisible = !!(composerEl && isElementVisible(composerEl));
 
         if (hasExactProfileLink) {
-          console.warn("[BeLeadAI] Thread verificado por link de perfil exacto para @" + expected);
+          console.log("[BeLeadAI] Thread verificado por link de perfil exacto para @" + expected);
           return true;
         }
 
         if (hasCandidate) {
-          console.warn("[BeLeadAI] Thread verificado por candidatos en header para @" + expected);
+          console.log("[BeLeadAI] Thread verificado por candidatos en header para @" + expected);
           return true;
         }
 
@@ -191,7 +191,7 @@
         if (allowSelectedRowFallback) {
           selectedRowNoConflictStreak += 1;
           if (selectedRowNoConflictStreak >= 2) {
-            console.warn(
+            console.log(
               "[BeLeadAI] Thread verificado por row fuerte + URL thread (sin conflicto visible estable) para @" +
                 expected
             );

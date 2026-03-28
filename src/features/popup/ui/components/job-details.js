@@ -49,11 +49,6 @@ export function renderJobDetails(container, stats, jobKind = "") {
 
   const isFinished = queued === 0 && sent === 0 && total > 0 && hasAnalyze;
 
-  setText(doc.getElementById("stat_queued"), queued);
-  setText(doc.getElementById("stat_sent"), sent);
-  setText(doc.getElementById("stat_ok"), ok);
-  setText(doc.getElementById("stat_error"), error);
-
   const progressFill = doc.getElementById("progress_fill");
   const progressBar = progressFill?.closest?.(".progress");
 
@@ -148,8 +143,4 @@ export function renderJobDetails(container, stats, jobKind = "") {
   }
   const jobProgress = doc.getElementById("job_progress");
   if (jobProgress) jobProgress.style.display = "block";
-}
-
-function setText(el, text) {
-  if (el) el.textContent = text ?? "";
 }

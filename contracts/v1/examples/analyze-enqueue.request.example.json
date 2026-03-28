@@ -1,0 +1,9 @@
+{
+  "schema": "../analyze-enqueue.request.schema.json",
+  "payload": {
+    "usernames": ["alice.demo", "bob.demo"],
+    "batch_size": 25,
+    "idempotency_key": "f3c1f1df-demo-analyze",
+    "idempotency_version": 2
+  }
+}

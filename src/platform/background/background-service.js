@@ -5,6 +5,12 @@ importScripts(
   "/src/platform/background/modules/storage.js",
   "/src/platform/background/modules/auth.js",
   "/src/platform/background/modules/ws.js",
+  "/src/platform/background/modules/jobs-runtime.js",
+  "/src/platform/background/modules/jobs-reporting.js",
+  "/src/platform/background/modules/jobs-watchdog.js",
+  "/src/platform/background/modules/jobs-run-state.js",
+  "/src/platform/background/modules/jobs-outcomes.js",
+  "/src/platform/background/modules/jobs-lifecycle.js",
   "/src/platform/background/modules/jobs.js",
   "/src/platform/background/modules/job-notifier.js",
   "/src/platform/background/modules/messaging.js"

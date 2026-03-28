@@ -1,0 +1,10 @@
+{
+  "schema": "../config.response.schema.json",
+  "payload": {
+    "data": {
+      "max_message_length": 1000,
+      "min_message_length": 10,
+      "max_client_prompt_length": 2000
+    }
+  }
+}

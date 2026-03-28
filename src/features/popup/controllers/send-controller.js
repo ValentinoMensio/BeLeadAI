@@ -2,13 +2,22 @@
  * Controlador TAB Enviar: origen destinatarios, chips, encolar send, start/stop sender, progreso.
  */
 
-import { API_PATHS } from "../../../config/endpoints.js";
-import {
-  isTerminalJobStatus,
-  normalizeEntityType,
-  normalizeJobStatus,
-} from "../../../shared/domain/job-contract.js";
 import { logApiErrorDiagnostic } from "../../../shared/errors/error-diagnostics.js";
+import { sha256Hex } from "../../../shared/utils/idempotency.js";
+import { normalizeJobStatus } from "../../../shared/domain/job-contract.js";
+import { createSendEnqueueController } from "./send-enqueue-controller.js";
+import { createSendProgressController } from "./send-progress-controller.js";
+import { createSendRecipientsController } from "./send-recipients-controller.js";
+import { createSendSenderController } from "./send-sender-controller.js";
+import {
+  describeActiveWorkForSend,
+  getRetryAfterSec,
+  getSenderRuntimeContext,
+  isTerminalSendJobStatus,
+  normalizeJobId,
+  normalizeSendSummary,
+  waitMs,
+} from "./send-shared.js";
 
 const SEND_PROGRESS_POLL_MS = 6000;
 const SENDER_STATUS_POLL_MS = 5000;
@@ -39,9 +48,24 @@ const NO_PENDING_ERROR_CODES = new Set(["NO_PENDING_RECIPIENTS", "RECIPIENTS_ALR
  */
 export function initSendTab(deps) {
   const { store, services, ui, dom } = deps;
-  const { getState, setState } = store;
-  const { loadSettings, apiFetch, loadJobSummary, loadRecipientsJobsService, cancelJobService } =
-    services;
+  const {
+    getState,
+    setState,
+    getSelectedRecipientUsernames,
+    getSelectedRecipientCount,
+    isRecipientSelected,
+    setSendRecipientContext,
+    clearSendRecipientContext,
+  } = store;
+  const {
+    loadSettings,
+    apiFetch,
+    fetchPing,
+    loadJobSummary,
+    loadRecipientsJobsService,
+    loadRecipientSourceRecipientsPage,
+    cancelJobService,
+  } = services;
   const {
     setSendStatus,
     setEnqueueSendEnabled,
@@ -56,18 +80,74 @@ export function initSendTab(deps) {
   } = ui;
   const { qs, qsa } = dom;
 
-  let refreshSendProgressInFlight = null;
   let refreshRecipientsInFlight = null;
   let lastRecipientsRefreshTs = 0;
-  let enqueueSendInFlight = false;
-  let lastEnqueueAttemptTs = 0;
-  let startSenderInFlight = false;
-  let lastStartSenderAttemptTs = 0;
-  let sendProgressNullTicks = 0;
   let sendProgressStatusStickyUntil = 0;
   let sendApiBackoffUntil = 0;
-  let lastRateLimitProgressLogTs = 0;
   let lastRateLimitRecipientsLogTs = 0;
+  const enqueueState = {
+    inFlight: false,
+    lastAttemptTs: 0,
+    lastBlockingQuota: "",
+  };
+  let cancelableReconcileInFlight = null;
+  let lastCancelableReconcileTs = 0;
+  const runtimeState = {
+    refreshSendProgressInFlight: null,
+    startSenderInFlight: false,
+    lastStartSenderAttemptTs: 0,
+    sendProgressNullTicks: 0,
+    lastRateLimitProgressLogTs: 0,
+  };
+
+  const recipientsController = createSendRecipientsController({
+    store,
+    services: { loadSettings, loadRecipientSourceRecipientsPage },
+    ui: { setSendStatus, renderRecipients },
+    dom,
+    helpers: {
+      normalizeJobId,
+      setRecipientsExpanded,
+      updateRecipientsSelectionUI,
+      setSendInfoStatus,
+      syncRecipientChipsFromState,
+    },
+  });
+
+  const enqueueController = createSendEnqueueController({
+    store,
+    services: { loadSettings, apiFetch },
+    ui: {
+      setSendStatus,
+      setEnqueueSendEnabled,
+      getLimitsData,
+      refreshLimitsWithCache,
+      isUnlimited,
+    },
+    dom,
+    config: {
+      enqueueClickGuardMs: ENQUEUE_CLICK_GUARD_MS,
+    },
+    runtime: {
+      activeConflictErrorCodes: ACTIVE_CONFLICT_ERROR_CODES,
+      noPendingErrorCodes: NO_PENDING_ERROR_CODES,
+      onSendRecipientsJobChange: (...args) => recipientsController.onSendRecipientsJobChange(...args),
+    },
+    helpers: {
+      getSelectedRecipients,
+      getFromAccountContext,
+      buildSendIdempotency,
+      setSendInfoStatus,
+      refreshRecipients,
+      refreshSendProgress,
+      startSendProgressPolling,
+      normalizeJobId,
+    },
+    enqueueState,
+  });
+
+  let progressController = null;
+  let senderController = null;
 
   function markSendProgressStatusSticky(stats) {
     const queued = Number(stats?.queued || 0) || 0;
@@ -100,23 +180,6 @@ export function initSendTab(deps) {
     const syncEl = qs("#send_last_sync");
     if (!syncEl) return;
     syncEl.textContent = `Ultima sincronizacion: ${new Date().toLocaleTimeString()}`;
-  }
-
-  async function waitMs(ms) {
-    const delay = Math.max(0, Number(ms || 0));
-    if (delay <= 0) return;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-  }
-
-  function getRetryAfterSec(result) {
-    const retry = Number(
-      result?.error?.retryAfterSec ??
-        result?.error?.details?.retry_after ??
-        result?.error?.details?.retry_after_sec ??
-        result?.error?.details?.retryAfter
-    );
-    if (!Number.isFinite(retry) || retry <= 0) return 0;
-    return Math.ceil(retry);
   }
 
   function applySendApiBackoff(result) {
@@ -192,70 +255,83 @@ export function initSendTab(deps) {
     return { ...lastResult, attempts: CANCEL_JOB_RETRY_DELAYS_MS.length };
   }
 
-  function describeSenderActivity(status) {
-    if (!status?.isRunning) return "";
-    const stage = String(status.progressStage || "").toLowerCase();
-    if (stage === "cooldown_wait") {
-      return `Esperando próximo envío (${status.timeUntilNextFormatted || "--:--"})`;
-    }
-    if (stage === "task_claimed") return "Tarea tomada. Preparando envío...";
-    if (stage === "ws_tasks") return "Recibiendo tareas en tiempo real...";
-    if (stage === "pull_ok") return "Buscando nuevas tareas en el servidor...";
-    if (stage === "no_tasks_retry")
-      return "No hay tareas por ahora. Reintentando automaticamente...";
-    if (stage === "content_ack") return "Instagram respondió. Confirmando resultado...";
-    if (stage === "thread_identity_skip")
-      return "No se pudo validar un hilo. Saltando ese contacto y continuando...";
-    if (stage === "recovery") return "Recuperando conexión y pestaña de Instagram...";
-    if (stage === "result_reported") return "Resultado reportado. Continuando...";
-    if (stage === "started") return "Sender iniciado. Preparando primer envío...";
-    return "Sender en ejecución...";
-  }
+  async function reconcilePendingCancelableJobId(status) {
+    const running = !!status?.isRunning;
+    if (running) return;
+    const st = getState();
+    const stateCancelableId = normalizeJobId(st.pendingCancelableSendJobId);
+    const taskCancelableId = normalizeJobId(status?.currentTask?.job_id);
+    if (!stateCancelableId || taskCancelableId) return;
 
-  function describeActiveWorkForSend(activeWork) {
-    const kind = String(activeWork?.kind || "").toLowerCase();
-    const status = String(activeWork?.status || "running").toLowerCase();
-    if (kind.includes("send")) {
-      const statusLabel = status === "pending" ? "pendiente" : "en curso";
-      return `Hay un envio ${statusLabel}. Podes cancelarlo con "Detener envio".`;
+    const now = Date.now();
+    if (cancelableReconcileInFlight) {
+      await cancelableReconcileInFlight;
+      return;
     }
-    const kindLabel = kind.includes("send")
-      ? "envio"
-      : kind.includes("analyze")
-        ? "analisis"
-        : "extraccion";
-    const statusLabel = status === "pending" ? "pendiente" : "en curso";
-    return `Hay un ${kindLabel} ${statusLabel}. Cuando termine, vas a poder elegir destinatarios.`;
+    if (now - lastCancelableReconcileTs < 3500) return;
+    lastCancelableReconcileTs = now;
+
+    cancelableReconcileInFlight = (async () => {
+      try {
+        const cfg = await loadSettings();
+        const base = (cfg?.api_base || "").trim().replace(/\/+$/, "");
+        if (!base) return;
+        const summary = await loadJobSummary(base, stateCancelableId);
+        const statusCode = Number(summary?.status || summary?.error?.status || 0) || 0;
+        if (statusCode === 404 || statusCode === 422) {
+          setState({ pendingCancelableSendJobId: null });
+          return;
+        }
+        if (!summary?.ok) return;
+        const jobStatus = normalizeJobStatus(summary?.data?.status);
+        if (jobStatus && isTerminalSendJobStatus(jobStatus)) {
+          setState({ pendingCancelableSendJobId: null });
+        }
+      } catch {
+        // best-effort reconciliation
+      }
+    })();
+
+    try {
+      await cancelableReconcileInFlight;
+    } finally {
+      cancelableReconcileInFlight = null;
+    }
   }
 
   async function getFromAccountContext() {
+    const cfg = await loadSettings();
+    try {
+      const senderCtx = await getSenderRuntimeContext();
+      if (senderCtx.fromAccount) {
+        return {
+          sendFromAccount: senderCtx.fromAccount,
+        };
+      }
+    } catch {}
     try {
       const r = await chrome.runtime.sendMessage({ action: "get_logged_in_username" });
-      const username = String(r?.username || "").trim();
-      const userId = r?.user_id != null ? String(r.user_id).trim() : "";
+      const username = String(r?.username || "")
+        .trim()
+        .toLowerCase();
+      const userId = String(r?.user_id || "").trim();
+      if (username || userId) {
+        return {
+          sendFromAccount: username || userId,
+        };
+      }
+    } catch {}
+    try {
+      const ping = await fetchPing(cfg);
+      const accountUsername = String(ping?.accountUsername || "")
+        .trim()
+        .toLowerCase();
       return {
-        sendFromAccount: userId || username,
+        sendFromAccount: accountUsername,
       };
     } catch {
       return { sendFromAccount: "" };
     }
-  }
-
-  async function sha256Hex(text) {
-    const input = String(text || "");
-    if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
-      const bytes = new TextEncoder().encode(input);
-      const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-      return Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    }
-    let hash = 2166136261;
-    for (let i = 0; i < input.length; i++) {
-      hash ^= input.charCodeAt(i);
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-    }
-    return (hash >>> 0).toString(16).padStart(8, "0");
   }
 
   async function buildSendIdempotency(
@@ -307,29 +383,6 @@ export function initSendTab(deps) {
     return { idempotencyKey, messageHash, recipientIdempotencyKeys };
   }
 
-  function normalizeCounter(value) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  }
-
-  function normalizeSendSummary(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    const queued = normalizeCounter(
-      raw.queued ?? raw.pending ?? raw.pending_count ?? raw.queued_count
-    );
-    const sent = normalizeCounter(raw.running ?? raw.sent ?? raw.running_count ?? raw.sent_count);
-    const ok = normalizeCounter(raw.completed ?? raw.ok ?? raw.completed_count ?? raw.ok_count);
-    const error = normalizeCounter(raw.failed ?? raw.error ?? raw.failed_count ?? raw.error_count);
-    return {
-      ...raw,
-      status: normalizeJobStatus(raw.status),
-      queued,
-      sent,
-      ok,
-      error,
-    };
-  }
-
   async function getLastSendJobId() {
     const data = await new Promise((r) =>
       chrome.storage.local.get({ last_send_job_id: null, dm_sender_current_job_id: null }, (d) =>
@@ -342,19 +395,6 @@ export function initSendTab(deps) {
       chrome.storage.local.set({ last_send_job_id: jobId });
     }
     return jobId;
-  }
-
-  function normalizeJobId(value, kindHint = "job") {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    if (raw.includes(":")) return raw;
-    const kind = normalizeEntityType(kindHint);
-    if (kind === "flow") return `flow:${raw}`;
-    return raw;
-  }
-
-  function isTerminalSendJobStatus(status) {
-    return isTerminalJobStatus(status);
   }
 
   async function restoreSendProgressFromCache() {
@@ -375,7 +415,7 @@ export function initSendTab(deps) {
   }
 
   function getSelectedRecipients() {
-    return [...getState().selectedRecipientSet];
+    return getSelectedRecipientUsernames();
   }
 
   function getRecipientsKindLabel(st = getState()) {
@@ -389,7 +429,7 @@ export function initSendTab(deps) {
     const listEl = qs("#send_recipients_list");
     const toggleEl = qs("#recipients_toggle");
     const actionsEl = document.getElementById("recipients_actions");
-    const hasRecipients = (getState().selectedSendUsernames || []).length > 0;
+    const hasRecipients = (getState().visibleRecipientUsernames || []).length > 0;
     const open = !!expanded;
     if (toggleEl) toggleEl.setAttribute("aria-expanded", open ? "true" : "false");
     if (listEl) listEl.style.display = open && hasRecipients ? "flex" : "none";
@@ -399,10 +439,9 @@ export function initSendTab(deps) {
   function syncRecipientChipsFromState() {
     const listEl = qs("#send_recipients_list");
     if (!listEl) return;
-    const selected = getState().selectedRecipientSet;
     qsa(".recipient-chip", listEl).forEach((chip) => {
       const username = String(chip?.dataset?.username || "").trim();
-      const on = !!username && selected.has(username);
+      const on = !!username && isRecipientSelected(username);
       chip.classList.toggle("selected", on);
       chip.classList.toggle("deselected", !on);
     });
@@ -410,17 +449,21 @@ export function initSendTab(deps) {
 
   function updateRecipientsSelectionUI() {
     const st = getState();
-    const count = st.selectedRecipientSet.size;
-    const total = st.selectedSendUsernames.length;
+    const count = getSelectedRecipientCount();
+    const total = Number(st.recipientMatchedCount || st.recipientTotalCount || st.visibleRecipientUsernames.length || 0);
     const labelEl = document.getElementById("recipients_toggle_label");
     if (labelEl)
       labelEl.textContent =
-        total > 0 ? `Ver y elegir destinatarios (${count}/${total})` : "Ver destinatarios";
+        total > 0 ? `Ver destinatarios cargados (${count}/${total})` : "Ver destinatarios";
     updateRecipientsSummaryLabel(
       qs("#send_recipients_summary"),
       total,
       count,
-      getRecipientsKindLabel(st)
+      getRecipientsKindLabel(st),
+      {
+        matchedCount: st.recipientMatchedCount || st.recipientTotalCount || 0,
+        visibleCount: Array.isArray(st.visibleRecipientUsernames) ? st.visibleRecipientUsernames.length : 0,
+      }
     );
     if (count > 0) {
       setSendInfoStatus(
@@ -434,131 +477,15 @@ export function initSendTab(deps) {
   }
 
   function stopSendProgressPolling() {
-    const s = getState();
-    if (s.sendProgressInterval) {
-      clearInterval(s.sendProgressInterval);
-      setState({ sendProgressInterval: null });
-    }
-    sendProgressNullTicks = 0;
+    return progressController?.stopSendProgressPolling();
   }
 
   function startSendProgressPolling() {
-    stopSendProgressPolling();
-    const id = setInterval(async () => {
-      const stats = await refreshSendProgress();
-      if (!stats) {
-        sendProgressNullTicks += 1;
-        if (sendProgressNullTicks >= 2) {
-          stopSendProgressPolling();
-        }
-        return;
-      }
-      sendProgressNullTicks = 0;
-      if ((stats.queued || 0) + (stats.sent || 0) === 0) stopSendProgressPolling();
-    }, SEND_PROGRESS_POLL_MS);
-    setState({ sendProgressInterval: id });
+    return progressController?.startSendProgressPolling(refreshSendProgress);
   }
 
   async function refreshSendProgress(force = false) {
-    if (refreshSendProgressInFlight) return refreshSendProgressInFlight;
-    refreshSendProgressInFlight = (async () => {
-      try {
-        if (hasSendApiBackoff(force)) {
-          const restored = await restoreSendProgressFromCache();
-          updateSendSyncLabel();
-          return restored || null;
-        }
-        const jobId = await getLastSendJobId();
-        if (!jobId) {
-          setState({ pendingCancelableSendJobId: null });
-          return null;
-        }
-        const cfg = await loadSettings();
-        const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-        if (!base) return null;
-        const summary = await loadJobSummary(base, jobId);
-        if (summary?.ok && summary?.data) {
-          const stats = normalizeSendSummary(summary.data);
-          updateSendJobProgress(stats);
-          markSendProgressStatusSticky(stats);
-          chrome.storage.local.set({ last_send_job_id: jobId, last_send_job_stats: stats });
-          const st = getState();
-          const queued = Number(stats.queued || 0) || 0;
-          const sent = Number(stats.sent || 0) || 0;
-          const inFlight = queued + sent > 0;
-          const isTerminal = isTerminalSendJobStatus(stats.status);
-          if (!inFlight && isTerminal) {
-            setState({ pendingCancelableSendJobId: null });
-          }
-          let senderRunning = false;
-          if (inFlight) {
-            try {
-              const senderStatus = await chrome.runtime.sendMessage({
-                action: "get_sender_status",
-              });
-              senderRunning = !!senderStatus?.isRunning;
-            } catch {
-              senderRunning = false;
-            }
-          }
-
-          if (inFlight && senderRunning) {
-            setEnqueueSendEnabled(false, "Esperá a que termine el envío.");
-          } else if (inFlight && !senderRunning) {
-            setEnqueueSendEnabled(true);
-            if (sent > 0 && queued === 0) {
-              setSendInfoStatus("Hay envios pendientes de confirmacion.");
-            }
-          } else if ([...st.selectedRecipientSet].length > 0) {
-            setEnqueueSendEnabled(true);
-          } else {
-            setEnqueueSendEnabled(false, "Sin destinatarios seleccionados.");
-          }
-          updateSendSyncLabel();
-          return stats;
-        }
-        const summaryStatus = Number(summary?.error?.status || 0) || 0;
-        const summaryCode = String(summary?.error?.code || "UNKNOWN")
-          .trim()
-          .toUpperCase();
-        const backoffSec = applySendApiBackoff(summary);
-        try {
-          const restored = await restoreSendProgressFromCache();
-          if (
-            summaryStatus === 404 ||
-            summaryStatus === 422 ||
-            summaryCode === "RESULT_ID_REQUIRED"
-          ) {
-            await clearSendProgressCache();
-            setState({ pendingCancelableSendJobId: null });
-            updateSendSyncLabel();
-            return restored || null;
-          }
-          if (!restored) {
-            const now = Date.now();
-            const isRateLimited = summaryStatus === 429 || summaryStatus === 503;
-            if (!isRateLimited || now - lastRateLimitProgressLogTs >= 12000) {
-              logApiErrorDiagnostic("send.refresh_progress.summary_unavailable", summary, {
-                jobId,
-                summaryCode: summaryCode || "UNKNOWN",
-                summaryStatus,
-                backoffSec,
-              });
-              if (isRateLimited) lastRateLimitProgressLogTs = now;
-            }
-          }
-          updateSendSyncLabel();
-          return restored;
-        } catch (e) {
-          logApiErrorDiagnostic("send.refresh_progress.restore_cache_failed", e, { jobId });
-          updateSendSyncLabel();
-          return null;
-        }
-      } finally {
-        refreshSendProgressInFlight = null;
-      }
-    })();
-    return refreshSendProgressInFlight;
+    return progressController?.refreshSendProgress(force) || null;
   }
 
   async function refreshRecipients(force = false) {
@@ -581,19 +508,30 @@ export function initSendTab(deps) {
         }
         const sel = qs("#send_recipients_job_select");
         if (!sel) return;
-        sel.innerHTML = '<option value="">— Cargando... —</option>';
+        const loadingOption = document.createElement("option");
+        loadingOption.value = "";
+        loadingOption.textContent = "— Cargando... —";
+        sel.replaceChildren(loadingOption);
         setSendInfoStatus("Cargando...", { source: "activity" });
         const recipientsResult = await loadRecipientsJobsService(base);
-        sel.innerHTML = '<option value="">— Elegí un origen de destinatarios —</option>';
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = "— Elegí un origen de destinatarios —";
+        sel.replaceChildren(placeholderOption);
         sel.disabled = false;
+        const st = getState();
+        const previousSelectedJobId = normalizeJobId(st.selectedSendJobId);
+        const previousSelectedKind = st.selectedSendKind || null;
+        const previousVisibleUsernames = Array.isArray(st.visibleRecipientUsernames)
+          ? [...st.visibleRecipientUsernames]
+          : [];
+        const previousSelectedRecipients = getSelectedRecipientUsernames();
+        const previousQuery = String(st.recipientQuery || "");
+        const previousNextCursor = st.recipientNextCursor || null;
+        const previousHasMore = !!st.recipientHasMore;
+        const previousTotalCount = Number(st.recipientTotalCount || 0) || 0;
+        const previousMatchedCount = Number(st.recipientMatchedCount || 0) || 0;
         const prevCancelableJobId = normalizeJobId(getState().pendingCancelableSendJobId);
-        setState({
-          selectedSendJobId: null,
-          selectedSendKind: null,
-          selectedSendUsernames: [],
-          selectedRecipientSet: new Set(),
-          pendingCancelableSendJobId: prevCancelableJobId || null,
-        });
 
         if (!recipientsResult?.ok) {
           const backoffSec = applySendApiBackoff(recipientsResult);
@@ -638,7 +576,7 @@ export function initSendTab(deps) {
           const listEl = qs("#send_recipients_list");
           if (listEl) {
             listEl.style.display = "none";
-            listEl.innerHTML = "";
+            listEl.replaceChildren();
           }
           const actionsEl = document.getElementById("recipients_actions");
           if (actionsEl) actionsEl.style.display = "none";
@@ -683,8 +621,29 @@ export function initSendTab(deps) {
           sel.appendChild(opt);
         });
 
+        const stillHasPreviousSelection =
+          !!previousSelectedJobId && jobsWithPending.some((job) => job.id === previousSelectedJobId);
+        if (stillHasPreviousSelection) {
+          sel.value = previousSelectedJobId;
+          setSendRecipientContext({
+            jobId: previousSelectedJobId,
+            kind: previousSelectedKind,
+            visibleUsernames: previousVisibleUsernames,
+            selectedUsernames: previousSelectedRecipients,
+            query: previousQuery,
+            nextCursor: previousNextCursor,
+            hasMore: previousHasMore,
+            totalCount: previousTotalCount,
+            matchedCount: previousMatchedCount,
+          });
+          setState({ pendingCancelableSendJobId: prevCancelableJobId || null });
+        } else {
+          clearSendRecipientContext();
+          setState({ pendingCancelableSendJobId: prevCancelableJobId || null });
+        }
+
         const infoEl = qs("#send_recipients_info");
-        if (infoEl) infoEl.style.display = "none";
+        if (infoEl) infoEl.style.display = stillHasPreviousSelection ? "block" : "none";
         if (jobsWithPending.length === 0) {
           sel.disabled = true;
           setSendStatus(
@@ -693,9 +652,16 @@ export function initSendTab(deps) {
           );
         } else {
           sel.disabled = false;
-          setSendInfoStatus(
-            `${jobsWithPending.length} origen${jobsWithPending.length === 1 ? "" : "es"} con pendientes. Elegí uno.`
-          );
+          if (stillHasPreviousSelection) {
+            updateRecipientsSelectionUI();
+            setSendInfoStatus(
+              `${jobsWithPending.length} origen${jobsWithPending.length === 1 ? "" : "es"} con pendientes. Mantuvimos tu selección.`
+            );
+          } else {
+            setSendInfoStatus(
+              `${jobsWithPending.length} origen${jobsWithPending.length === 1 ? "" : "es"} con pendientes. Elegí uno.`
+            );
+          }
         }
       } finally {
         refreshRecipientsInFlight = null;
@@ -704,503 +670,78 @@ export function initSendTab(deps) {
     return refreshRecipientsInFlight;
   }
 
-  async function onSendRecipientsJobChange(jobIdOrNull, kindOrNull) {
-    const sel = qs("#send_recipients_job_select");
-    const jobId = normalizeJobId(jobIdOrNull || (sel && sel.value) || null);
-    const kind = kindOrNull || sel?.selectedOptions?.[0]?.dataset?.kind || null;
-    if (!jobId) {
-      setState({
-        selectedSendJobId: null,
-        selectedSendKind: null,
-        selectedSendUsernames: [],
-        selectedRecipientSet: new Set(),
-      });
-      const infoEl = qs("#send_recipients_info");
-      if (infoEl) infoEl.style.display = "none";
-      const listEl = qs("#send_recipients_list");
-      if (listEl) {
-        listEl.style.display = "none";
-        listEl.innerHTML = "";
-      }
-      const actionsEl = document.getElementById("recipients_actions");
-      if (actionsEl) actionsEl.style.display = "none";
-      setRecipientsExpanded(false);
-      updateRecipientsSelectionUI();
-      return;
-    }
-    const cfg = await loadSettings();
-    const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-    if (!base) return;
-    const path = API_PATHS.recipientSourceRecipients(jobId);
-    const query = new URLSearchParams({ limit: "1000" }).toString();
-    setSendInfoStatus("Cargando destinatarios...", { source: "activity" });
-    try {
-      const result = await apiFetch(base, `${path}?${query}`);
-      if (!result.ok) {
-        logApiErrorDiagnostic("send.load_recipients.failed", result, { jobId });
-        setSendStatus(result?.errorMessage || "Error al cargar destinatarios.", true);
-        return;
-      }
-      const data =
-        result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
-      const usernames = data.usernames || [];
-      setState({
-        selectedSendJobId: normalizeJobId(jobId, kind || "job"),
-        selectedSendKind: kind || "followings_flow",
-        selectedSendUsernames: usernames,
-        selectedRecipientSet: new Set(usernames),
-      });
-      const infoEl = qs("#send_recipients_info");
-      if (infoEl) infoEl.style.display = "block";
-      const listEl = qs("#send_recipients_list");
-      const toggleEl = qs("#recipients_toggle");
-      const actionsEl = document.getElementById("recipients_actions");
-      const summaryEl = qs("#send_recipients_summary");
-      const kindLower = (kind || "").toLowerCase();
-      const kindLabel = kindLower.includes("flow")
-        ? "prospectos"
-        : kindLower.includes("analyze")
-          ? "perfiles"
-          : "followings";
-      renderRecipients(
-        { listEl, toggleEl, actionsEl, summaryEl },
-        usernames,
-        getState().selectedRecipientSet,
-        () => {
-          updateRecipientsSelectionUI();
-        },
-        kindLabel
-      );
-      setRecipientsExpanded(false);
-      updateRecipientsSelectionUI();
-    } catch {
-      setSendStatus("Error al cargar destinatarios", true);
-    }
-  }
+  progressController = createSendProgressController({
+    store,
+    services: { loadSettings, loadJobSummary },
+    ui: { setEnqueueSendEnabled, updateSendJobProgress },
+    helpers: {
+      hasSendApiBackoff,
+      restoreSendProgressFromCache,
+      getLastSendJobId,
+      markSendProgressStatusSticky,
+      updateSendSyncLabel,
+      applySendApiBackoff,
+      clearSendProgressCache,
+      setSendInfoStatus,
+    },
+    config: { sendProgressPollMs: SEND_PROGRESS_POLL_MS },
+    state: runtimeState,
+  });
 
-  async function enqueueSendMessages() {
-    const nowTs = Date.now();
-    if (enqueueSendInFlight) {
-      setSendStatus("Ya hay una solicitud de encolado en curso. Esperá un momento.", true);
-      return false;
-    }
-    if (nowTs - lastEnqueueAttemptTs < ENQUEUE_CLICK_GUARD_MS) {
-      setSendStatus("Esperá un instante antes de volver a encolar.", true);
-      return false;
-    }
-    enqueueSendInFlight = true;
-    lastEnqueueAttemptTs = nowTs;
-    try {
-      const cfg = await loadSettings();
-      if (!cfg.api_base) {
-        setSendStatus("Configura la API en Opciones.", true);
-        enqueueSendInFlight = false;
-        return false;
-      }
-      const accountCtx = await getFromAccountContext();
-      const fromAccount = String(accountCtx.sendFromAccount || "").trim();
-      if (!fromAccount) {
-        setSendStatus(
-          "Abrí Instagram en una pestaña e iniciá sesión para detectar la cuenta.",
-          true
-        );
-        enqueueSendInFlight = false;
-        return false;
-      }
-      const st = getState();
-      const toSend = [...st.selectedRecipientSet];
-      if (!st.selectedSendJobId || toSend.length === 0) {
-        setSendStatus("Elegí un origen de destinatarios y marcá al menos uno.", true);
-        enqueueSendInFlight = false;
-        return false;
-      }
-      const limitsData = getLimitsData();
-      const remainingMonth = limitsData?.messages?.remaining_this_month;
-      if (
-        remainingMonth != null &&
-        !isUnlimited(remainingMonth) &&
-        toSend.length > remainingMonth
-      ) {
-        setSendStatus(
-          `Tu plan permite ${remainingMonth} mensaje${remainingMonth === 1 ? "" : "s"} este mes. No podés encolar ${toSend.length}.`,
-          true
-        );
-        return false;
-      }
-      const apiLimits = getState().apiLimits;
-      const useChatgpt = qs("#use_chatgpt") ? qs("#use_chatgpt").checked : false;
-      const message = (qs("#send_message") && qs("#send_message").value) || "";
-      if (!useChatgpt) {
-        if (!message.trim()) {
-          setSendStatus("Escribe un mensaje o activá la IA.", true);
-          return false;
-        }
-        if (message.length < apiLimits.min_message_length) {
-          setSendStatus(
-            `El mensaje es muy corto (mínimo ${apiLimits.min_message_length} caracteres).`,
-            true
-          );
-          return false;
-        }
-        if (message.length > apiLimits.max_message_length) {
-          setSendStatus(
-            `El mensaje es muy largo (máximo ${apiLimits.max_message_length} caracteres).`,
-            true
-          );
-          return false;
-        }
-      } else {
-        const prompt = (cfg.chatgpt_prompt || "").trim();
-        if (!prompt) {
-          setSendStatus("Configurá el prompt de IA en Opciones.", true);
-          return false;
-        }
-        if (prompt.length > apiLimits.max_client_prompt_length) {
-          setSendStatus(
-            `El prompt de IA es muy largo (máximo ${apiLimits.max_client_prompt_length} caracteres). Configuralo en Opciones.`,
-            true
-          );
-          return false;
-        }
-      }
-      const dryRun = qs("#dry_run") ? qs("#dry_run").checked : true;
-      if (!dryRun && !confirm("Vas a enviar mensajes realmente. ¿Continuar?")) return false;
+  const { onSendRecipientsJobChange } = recipientsController;
 
-      const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-      const dedupeMessageTemplate = useChatgpt ? (cfg.chatgpt_prompt || "").trim() : message;
-      const { idempotencyKey, messageHash, recipientIdempotencyKeys } = await buildSendIdempotency(
-        fromAccount,
-        toSend,
-        dedupeMessageTemplate,
-        st.selectedSendJobId,
-        dryRun,
-        useChatgpt
-      );
-      setSendInfoStatus(useChatgpt ? "Encolando con IA..." : "Encolando mensajes...", {
-        force: true,
-      });
-      setEnqueueSendEnabled(false, "Encolando...");
-      const result = await apiFetch(base, API_PATHS.sendEnqueue, {
-        method: "POST",
-        headers: {
-          "Idempotency-Key": idempotencyKey,
-        },
-        body: {
-          from_account: fromAccount,
-          usernames: toSend,
-          message_template: message || "",
-          message_template_hash: messageHash,
-          idempotency_key: idempotencyKey,
-          idempotency_version: 2,
-          recipient_idempotency_keys: recipientIdempotencyKeys,
-          source_job_id: st.selectedSendJobId,
-          dry_run: dryRun,
-          use_ai: useChatgpt,
-          client_prompt: useChatgpt ? (cfg.chatgpt_prompt || "").trim() : undefined,
-        },
-      });
-      const payload =
-        result.data?.data && typeof result.data.data === "object" ? result.data.data : result.data;
-      if (!result.ok) {
-        const errorCode = String(result?.error?.code || result?.data?.error?.code || "")
-          .trim()
-          .toUpperCase();
-        const blockingQuota =
-          result?.error?.details?.blocking_quota ||
-          result?.data?.error?.details?.blocking_quota ||
-          "";
-        const isActiveConflict =
-          result.status === 409 &&
-          (ACTIVE_CONFLICT_ERROR_CODES.has(errorCode) ||
-            blockingQuota === "active_job_by_client" ||
-            blockingQuota === "enqueue_lock_busy");
-        if (isActiveConflict) {
-          setEnqueueSendEnabled(false, "Esperá a que termine el trabajo en curso.");
-          setSendInfoStatus(
-            "Hay un trabajo en curso. Cuando termine, vas a poder encolar mensajes.",
-            { force: true }
-          );
-          await refreshRecipients(true);
-          return false;
-        }
-        const noPendingRecipients =
-          result.status === 400 &&
-          (NO_PENDING_ERROR_CODES.has(errorCode) || blockingQuota === "already_messaged");
-        if (noPendingRecipients) {
-          setSendInfoStatus("No hay pendientes: ya fueron enviados o están en cola.", {
-            force: true,
-          });
-          setEnqueueSendEnabled(false, "No hay pendientes para encolar.");
-        } else {
-          logApiErrorDiagnostic("send.enqueue_messages.failed", result, {
-            blockingQuota,
-            errorCode,
-          });
-          setEnqueueSendEnabled(getSelectedRecipients().length > 0);
-          setSendStatus(result?.errorMessage || "Error", true);
-        }
-        return false;
-      }
-      const jobId = normalizeJobId(payload?.job_id || "");
-      const total = payload?.total_items || 0;
-      if (!jobId || total <= 0) {
-        const deduped = Number(payload?.deduped_count || 0);
-        if (deduped > 0) {
-          setSendStatus(
-            `No se encolaron mensajes: ${deduped} destinatario(s) ya estaban dedupeados para esta configuración.`,
-            true
-          );
-        } else {
-          setSendStatus("No se encolaron mensajes para los destinatarios seleccionados.", true);
-        }
-        setEnqueueSendEnabled(getSelectedRecipients().length > 0);
-        return false;
-      }
-      chrome.storage.local.set({ last_send_job_id: jobId });
-      if (typeof refreshLimitsWithCache === "function") refreshLimitsWithCache(true);
-      setSendInfoStatus(`Encolados ${total} mensajes`, { force: true });
-      const section = qs("#send_job_progress_section");
-      if (section) section.style.display = "block";
-      await onSendRecipientsJobChange(st.selectedSendJobId, st.selectedSendKind);
-      const stats = await refreshSendProgress(true);
-      if (stats && (stats.queued || 0) + (stats.sent || 0) > 0) startSendProgressPolling();
-      return true;
-    } finally {
-      enqueueSendInFlight = false;
-    }
-  }
+  const { enqueueSendMessages } = enqueueController;
 
   async function startSender() {
-    const now = Date.now();
-    if (now - lastStartSenderAttemptTs < START_SENDER_CLICK_GUARD_MS) {
-      setSendStatus("Esperá un momento antes de volver a iniciar.", true);
-      return;
-    }
-    lastStartSenderAttemptTs = now;
-
-    if (startSenderInFlight) {
-      setSendStatus("El sender ya se está iniciando. Esperá un momento.", true);
-      return;
-    }
-    startSenderInFlight = true;
-    let senderStartedByThisCall = false;
-    try {
-      const selectedRecipients = getSelectedRecipients();
-      const hasSelectedRecipients = selectedRecipients.length > 0;
-      const startBtn = qs("#start_sender");
-      if (startBtn) startBtn.disabled = true;
-
-      if (hasSelectedRecipients) {
-        setSendInfoStatus("Encolando mensajes...", { force: true });
-        const ok = await enqueueSendMessages();
-        if (!ok) {
-          updateSenderStatus();
-          return;
-        }
-      }
-
-      setSendInfoStatus("Iniciando sender...", { force: true });
-      const result = await chrome.runtime.sendMessage({
-        action: "start_sender",
-        defer_first_pull: false,
-        allow_idle_start: hasSelectedRecipients,
-      });
-      if (result?.status !== "started") {
-        if (result?.status === "already_running" || result?.status === "starting") {
-          setSendInfoStatus("El sender ya está en ejecución.", { force: true });
-          if (hasSelectedRecipients) {
-            try {
-              await chrome.runtime.sendMessage({ action: "process_now" });
-            } catch {
-              // best-effort trigger
-            }
-          }
-          updateSenderStatus();
-          return;
-        }
-        if (result?.status === "no_tasks") {
-          setSendInfoStatus("Sin tareas pendientes", { force: true, source: "activity" });
-          updateSenderStatus();
-          return;
-        }
-        if (result?.status === "no_tasks_cooldown") {
-          setSendInfoStatus("Sin tareas pendientes", { force: true, source: "activity" });
-          updateSenderStatus();
-          return;
-        }
-        if (result?.reason === "sender_offline") {
-          setSendStatus(
-            "No hay sender activo para esta cuenta. Abrí Instagram e iniciá sesión.",
-            true
-          );
-        } else {
-          setSendStatus("No se pudo iniciar el envío.", true);
-        }
-        return;
-      }
-      senderStartedByThisCall = true;
-
-      if (!result?.prefetched_task) {
-        try {
-          await chrome.runtime.sendMessage({ action: "process_now" });
-        } catch {
-          // best-effort trigger
-        }
-      }
-
-      setSendInfoStatus("Envío iniciado", { force: true });
-      updateSenderStatus();
-    } catch {
-      setSendStatus("Error al iniciar el envío.", true);
-      if (senderStartedByThisCall) {
-        try {
-          await chrome.runtime.sendMessage({ action: "stop_sender" });
-        } catch {}
-      }
-      updateSenderStatus();
-    } finally {
-      startSenderInFlight = false;
-      updateSenderStatus();
-    }
+    return senderController?.startSender();
   }
 
   async function stopSender() {
-    try {
-      setSendInfoStatus("Deteniendo envío...", { force: true });
-      let result = null;
-      try {
-        result = await chrome.runtime.sendMessage({ action: "stop_sender" });
-      } catch {
-        result = null;
-      }
-      let canceledInfo = null;
-      let canceledJobId = "";
-      try {
-        const stateJobId = String(getState().pendingCancelableSendJobId || "").trim();
-        const cachedJobId = await getLastSendJobId();
-        const jobId = stateJobId || cachedJobId;
-        canceledJobId = jobId;
-        if (jobId) {
-          const cfg = await loadSettings();
-          const base = (cfg.api_base || "").trim().replace(/\/+$/, "");
-          if (base) {
-            canceledInfo = await cancelJobWithRetry(base, jobId);
-          }
-        }
-      } catch (e) {
-        canceledInfo = {
-          ok: false,
-          status: 0,
-          errorMessage: String(e?.message || "Error de red al cancelar"),
-          error: String(e?.message || "Error de red al cancelar"),
-          attempts: 0,
-        };
-      }
-
-      if (canceledInfo?.ok && canceledInfo?.data?.cancel) {
-        const sentConfirmed = Number(canceledInfo.data.cancel.sent_confirmed || 0);
-        setSendInfoStatus(`Envío detenido. Job cancelado (ya enviados: ${sentConfirmed}).`, {
-          force: true,
-        });
-        setState({ pendingCancelableSendJobId: null });
-      } else if (canceledJobId) {
-        const attempts = Number(canceledInfo?.attempts || CANCEL_JOB_RETRY_DELAYS_MS.length);
-        const reason = String(
-          canceledInfo?.error || "No se pudo cancelar el job en el servidor."
-        ).trim();
-        setState({ pendingCancelableSendJobId: canceledJobId });
-        setSendStatus(
-          `Envío detenido en la extensión, pero falló la cancelación remota tras ${attempts} intento(s): ${reason}. Reintentá "Detener envío".`,
-          true
-        );
-      } else if (result?.status === "stopped") {
-        setSendInfoStatus("Listo", { force: true });
-      } else {
-        setSendInfoStatus("Envío detenido en la extensión.", { force: true });
-      }
-
-      updateSenderStatus();
-      const st = getState();
-      await refreshSendProgress(true);
-      await refreshRecipients();
-      const sel = qs("#send_recipients_job_select");
-      if (st.selectedSendJobId && sel) {
-        sel.value = st.selectedSendJobId;
-        await onSendRecipientsJobChange(st.selectedSendJobId, st.selectedSendKind);
-      }
-    } catch {
-      setSendStatus("Error al detener el envío.", true);
-    }
+    return senderController?.stopSender();
   }
 
   function stopSenderStatusPolling() {
-    const s = getState();
-    if (s.senderStatusInterval) {
-      clearInterval(s.senderStatusInterval);
-      setState({ senderStatusInterval: null });
-    }
+    return senderController?.stopSenderStatusPolling();
   }
 
   function startSenderStatusPolling() {
-    const s = getState();
-    if (s.senderStatusInterval) return;
-    const intervalId = setInterval(() => {
-      updateSenderStatus();
-    }, SENDER_STATUS_POLL_MS);
-    setState({ senderStatusInterval: intervalId });
+    return senderController?.startSenderStatusPolling(updateSenderStatus);
   }
 
   async function updateSenderStatus() {
-    try {
-      const status = await chrome.runtime.sendMessage({ action: "get_sender_status" });
-      const startBtn = qs("#start_sender");
-      const stopBtn = qs("#stop_sender");
-
-      const st = getState();
-      const stateCancelableId = normalizeJobId(st.pendingCancelableSendJobId);
-      const taskCancelableId = normalizeJobId(status?.currentTask?.job_id);
-      const resolvedCancelableId = stateCancelableId || taskCancelableId;
-      const hasCancelablePending = !!resolvedCancelableId;
-
-      if (resolvedCancelableId && resolvedCancelableId !== stateCancelableId) {
-        setState({ pendingCancelableSendJobId: resolvedCancelableId });
-      }
-
-      if (!status) {
-        if (startBtn) startBtn.disabled = false;
-        if (stopBtn) stopBtn.disabled = !hasCancelablePending;
-        return;
-      }
-      updateSendSyncLabel();
-      if (status.isRunning) {
-        if (startBtn) startBtn.disabled = true;
-        if (stopBtn) stopBtn.disabled = false;
-        startSenderStatusPolling();
-        const activity = describeSenderActivity(status);
-        if (activity) {
-          setSendInfoStatus(activity, { source: "activity" });
-        }
-      } else {
-        const cooldownMs = Math.max(0, Number(status?.noTasksRestartCooldownMs || 0));
-        if (startBtn) startBtn.disabled = cooldownMs > 0;
-        if (stopBtn) stopBtn.disabled = !hasCancelablePending;
-        if (cooldownMs > 0) {
-          startSenderStatusPolling();
-        } else {
-          stopSenderStatusPolling();
-        }
-        setSendInfoStatus("Sin tareas pendientes", { source: "activity" });
-      }
-    } catch {
-      stopSenderStatusPolling();
-      const st = getState();
-      const hasCancelablePending = !!String(st.pendingCancelableSendJobId || "").trim();
-      const startBtn = qs("#start_sender");
-      const stopBtn = qs("#stop_sender");
-      if (startBtn) startBtn.disabled = false;
-      if (stopBtn) stopBtn.disabled = !hasCancelablePending;
-    }
+    return senderController?.updateSenderStatus();
   }
+
+  senderController = createSendSenderController({
+    store,
+    services: { loadSettings },
+    ui: { setSendStatus },
+    dom,
+    config: {
+      startSenderClickGuardMs: START_SENDER_CLICK_GUARD_MS,
+      senderStatusPollMs: SENDER_STATUS_POLL_MS,
+      cancelJobRetryDelaysMs: CANCEL_JOB_RETRY_DELAYS_MS,
+    },
+    runtime: {
+      enqueueSendMessages,
+      getLastEnqueueBlockingQuota: () => enqueueController.getLastEnqueueBlockingQuota(),
+      waitMs,
+      updateSenderStatus,
+      getLastSendJobId,
+      cancelJobWithRetry,
+      refreshSendProgress,
+      refreshRecipients,
+      onSendRecipientsJobChange: (...args) => recipientsController.onSendRecipientsJobChange(...args),
+      reconcilePendingCancelableJobId,
+      updateSendSyncLabel,
+    },
+    state: runtimeState,
+    helpers: {
+      getSelectedRecipients,
+      getFromAccountContext,
+      setSendInfoStatus,
+    },
+  });
 
   function bindSendEvents() {
     const cleanupFns = [];
@@ -1258,25 +799,26 @@ export function initSendTab(deps) {
     const selectAllBtn = document.querySelector("[data-action=select-all]");
     const deselectAllBtn = document.querySelector("[data-action=deselect-all]");
     if (selectAllBtn) {
-      const onSelectAll = () => {
-        const st = getState();
-        st.selectedRecipientSet.clear();
-        st.selectedSendUsernames.forEach((u) => st.selectedRecipientSet.add(u));
-        syncRecipientChipsFromState();
-        updateRecipientsSelectionUI();
-      };
+      const onSelectAll = () => recipientsController.selectAllRecipients();
       selectAllBtn.addEventListener("click", onSelectAll);
       cleanupFns.push(() => selectAllBtn.removeEventListener("click", onSelectAll));
     }
     if (deselectAllBtn) {
-      const onDeselectAll = () => {
-        const st = getState();
-        st.selectedRecipientSet.clear();
-        syncRecipientChipsFromState();
-        updateRecipientsSelectionUI();
-      };
+      const onDeselectAll = () => recipientsController.deselectAllRecipients();
       deselectAllBtn.addEventListener("click", onDeselectAll);
       cleanupFns.push(() => deselectAllBtn.removeEventListener("click", onDeselectAll));
+    }
+    const recipientsSearch = qs("#send_recipients_search");
+    if (recipientsSearch) {
+      const onSearchInput = () => recipientsController.onRecipientsSearchInput();
+      recipientsSearch.addEventListener("input", onSearchInput);
+      cleanupFns.push(() => recipientsSearch.removeEventListener("input", onSearchInput));
+    }
+    const loadMoreBtn = qs("#recipients_load_more");
+    if (loadMoreBtn) {
+      const onLoadMore = () => recipientsController.loadMoreRecipients();
+      loadMoreBtn.addEventListener("click", onLoadMore);
+      cleanupFns.push(() => loadMoreBtn.removeEventListener("click", onLoadMore));
     }
 
     const startSenderBtn = qs("#start_sender");
@@ -1312,5 +854,6 @@ export function initSendTab(deps) {
     stopSendProgressPolling,
     startSendProgressPolling,
     onSendRecipientsJobChange,
+    startSenderStatusPolling,
   };
 }

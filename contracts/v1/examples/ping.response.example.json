@@ -1,0 +1,15 @@
+{
+  "schema": "../ping.response.schema.json",
+  "payload": {
+    "data": {
+      "account_username": "sender_account",
+      "default_from_account": "sender_account",
+      "accounts": [
+        {
+          "username": "sender_account",
+          "status": "active"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/send-pull.request.schema.json",
+  "title": "POST /api/send/pull request",
+  "type": "object",
+  "required": ["limit", "from_account"],
+  "properties": {
+    "limit": { "type": ["integer", "number"], "minimum": 1 },
+    "from_account": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

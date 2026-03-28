@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/send-result.request.schema.json",
+  "title": "POST /api/send/result request",
+  "type": "object",
+  "required": ["job_id", "task_id", "lease_proof", "ok", "dry_run"],
+  "properties": {
+    "job_id": { "type": "string", "minLength": 1 },
+    "task_id": { "type": "string", "minLength": 1 },
+    "lease_proof": { "type": "string", "minLength": 1 },
+    "ok": { "type": "boolean" },
+    "dry_run": { "type": "boolean" },
+    "error": { "type": "string" }
+  },
+  "additionalProperties": false
+}

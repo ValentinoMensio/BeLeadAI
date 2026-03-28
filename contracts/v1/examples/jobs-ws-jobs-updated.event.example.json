@@ -1,0 +1,12 @@
+{
+  "schema": "../jobs-ws-jobs-updated.event.schema.json",
+  "payload": {
+    "type": "jobs_updated",
+    "event_id": "evt_001",
+    "payload": {
+      "job_id": "job_123",
+      "kind": "followings_flow",
+      "status": "completed"
+    }
+  }
+}

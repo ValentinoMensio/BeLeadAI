@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/jobs-ws-jobs-updated.event.schema.json",
+  "title": "Jobs websocket jobs_updated event",
+  "type": "object",
+  "required": ["type", "event_id", "payload"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["jobs_updated", "jobs.updated", "job.updated"]
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

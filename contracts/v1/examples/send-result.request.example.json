@@ -1,0 +1,10 @@
+{
+  "schema": "../send-result.request.schema.json",
+  "payload": {
+    "job_id": "send_job_123",
+    "task_id": "task_001",
+    "lease_proof": "lease-proof-demo",
+    "ok": true,
+    "dry_run": true
+  }
+}

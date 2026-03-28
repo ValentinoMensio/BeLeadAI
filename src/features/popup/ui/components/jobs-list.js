@@ -11,7 +11,10 @@ import { formatJobOptionLabel } from "../../../../shared/utils/format.js";
  */
 export function renderJobsList(container, jobs, { selectedJobId }) {
   if (!container) return;
-  container.innerHTML = '<option value="">— Elegí un resultado —</option>';
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "— Elegí un resultado —";
+  container.replaceChildren(placeholder);
   for (const j of jobs) {
     const hasAnalyze = j._hasAnalyze === true;
     const opt = document.createElement("option");

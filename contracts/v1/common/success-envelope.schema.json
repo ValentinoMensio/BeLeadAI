@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/common/success-envelope.schema.json",
+  "title": "Success Envelope",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

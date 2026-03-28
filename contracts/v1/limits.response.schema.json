@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/limits.response.schema.json",
+  "title": "GET /ext/v2/limits success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "from_account": {
+          "type": ["string", "null"]
+        },
+        "blocking_quota": {
+          "type": ["string", "null"]
+        },
+        "messages": {
+          "type": "object",
+          "properties": {
+            "used_today": { "type": ["number", "integer", "null"] },
+            "remaining_today": { "type": ["number", "integer", "null", "string"] },
+            "used_this_month": { "type": ["number", "integer", "null"] },
+            "remaining_this_month": { "type": ["number", "integer", "null", "string"] },
+            "reset_at": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        },
+        "plan": {
+          "type": "object",
+          "properties": {
+            "name": { "type": ["string", "null"] },
+            "month_limit": { "type": ["number", "integer", "null", "string"] },
+            "daily_safety_limit": { "type": ["number", "integer", "null", "string"] }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

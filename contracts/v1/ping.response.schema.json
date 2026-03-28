@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/v1/ping.response.schema.json",
+  "title": "GET /ext/v2/ping success response",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "account_username": {
+          "type": ["string", "null"]
+        },
+        "default_from_account": {
+          "type": ["string", "null"]
+        },
+        "accounts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

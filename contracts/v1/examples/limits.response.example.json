@@ -1,0 +1,21 @@
+{
+  "schema": "../limits.response.schema.json",
+  "payload": {
+    "data": {
+      "from_account": "sender_account",
+      "blocking_quota": null,
+      "messages": {
+        "used_today": 12,
+        "remaining_today": 18,
+        "used_this_month": 124,
+        "remaining_this_month": 376,
+        "reset_at": "2026-03-31T23:59:59Z"
+      },
+      "plan": {
+        "name": "starter",
+        "month_limit": 500,
+        "daily_safety_limit": 30
+      }
+    }
+  }
+}

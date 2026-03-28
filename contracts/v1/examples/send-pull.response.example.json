@@ -1,0 +1,20 @@
+{
+  "schema": "../send-pull.response.schema.json",
+  "payload": {
+    "data": {
+      "items": [
+        {
+          "job_id": "send_job_123",
+          "task_id": "task_001",
+          "lease_proof": "lease-proof-demo",
+          "dest_username": "alice.demo",
+          "payload": {
+            "target_username": "alice.demo",
+            "message_template": "Hola Alice",
+            "dry_run": true
+          }
+        }
+      ]
+    }
+  }
+}

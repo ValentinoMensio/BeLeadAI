@@ -39,6 +39,18 @@
       return TERMINAL_STATUSES.has(normalizeStatus(status));
     }
 
+    function isNotifiableEntry(entry) {
+      const sourceLower = String(entry?.source || "")
+        .trim()
+        .toLowerCase();
+      const kindLower = String(entry?.kind || "")
+        .trim()
+        .toLowerCase();
+      if (sourceLower === "flow") return false;
+      if (kindLower === "followings_flow" || kindLower === "fetch_followings") return false;
+      return true;
+    }
+
     function bodyForKind(kind, source) {
       const kindLower = String(kind || "")
         .trim()
@@ -248,6 +260,7 @@
       if (!prevEntry || !currEntry) return false;
       if (!isActiveStatus(prevEntry.status)) return false;
       if (!isTerminalStatus(currEntry.status)) return false;
+      if (!isNotifiableEntry(currEntry)) return false;
 
       const currStatus = normalizeStatus(currEntry.status);
       if (CANCELED_STATUSES.has(currStatus)) return false;
