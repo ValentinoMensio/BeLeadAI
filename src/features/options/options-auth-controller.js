@@ -135,7 +135,10 @@ export function createOptionsAuthController(deps) {
           : "Sesión cerrada en este dispositivo."
       );
     } else if (allDevices) {
-      setSaveStatus("Sesión local cerrada. La revocación global no está disponible en tu API.", true);
+      setSaveStatus(
+        "Sesión local cerrada. La revocación global no está disponible en tu API.",
+        true
+      );
     } else {
       setSaveStatus("Sesión local cerrada.");
     }

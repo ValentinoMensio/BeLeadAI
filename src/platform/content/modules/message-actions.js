@@ -1,13 +1,7 @@
 (function initContentMessageActionsModule(globalScope) {
   function createContentMessageActionsModule({ selectorsModule, typeHumanLike }) {
-    const {
-      HUMAN_CONFIG,
-      sleep,
-      humanDelay,
-      waitForCondition,
-      waitForElement,
-      waitForSendButton,
-    } = selectorsModule;
+    const { HUMAN_CONFIG, sleep, humanDelay, waitForCondition, waitForElement, waitForSendButton } =
+      selectorsModule;
 
     function normalizeMessageText(value) {
       return String(value || "")

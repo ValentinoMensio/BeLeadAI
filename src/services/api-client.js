@@ -424,7 +424,13 @@ export async function apiFetch(baseUrl, path, options = {}) {
           { error: { code: "REQUEST_TIMEOUT" } },
           "La solicitud tardó demasiado."
         );
-        return { ok: false, status: 0, errorMessage: error.message, error, observability: { traceId: null, requestId: null, traceparent: null } };
+        return {
+          ok: false,
+          status: 0,
+          errorMessage: error.message,
+          error,
+          observability: { traceId: null, requestId: null, traceparent: null },
+        };
       }
       const msg = (e?.message || String(e)).toLowerCase();
       const errorMessage = msg.includes("cors")
@@ -440,7 +446,13 @@ export async function apiFetch(baseUrl, path, options = {}) {
         }
       }
       const error = buildApiError(0, { error: { code: "NETWORK_ERROR" } }, errorMessage);
-      return { ok: false, status: 0, errorMessage: error.message, error, observability: { traceId: null, requestId: null, traceparent: null } };
+      return {
+        ok: false,
+        status: 0,
+        errorMessage: error.message,
+        error,
+        observability: { traceId: null, requestId: null, traceparent: null },
+      };
     }
   });
 }

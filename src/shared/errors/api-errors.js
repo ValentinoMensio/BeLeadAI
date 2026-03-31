@@ -128,8 +128,15 @@ function resolveDailyLeadCounts(details) {
     pickCount(details, ["requested_to_send", "requested_send", "requested_limit", "requested"]) ??
     0;
 
-  const explicitUsedToday = pickMaxCount(details, ["used_today", "consumed_today", "messages_used_today"]);
-  const usedToday = explicitUsedToday != null ? Math.max(explicitUsedToday, sent + pending) : Math.max(0, sent + pending);
+  const explicitUsedToday = pickMaxCount(details, [
+    "used_today",
+    "consumed_today",
+    "messages_used_today",
+  ]);
+  const usedToday =
+    explicitUsedToday != null
+      ? Math.max(explicitUsedToday, sent + pending)
+      : Math.max(0, sent + pending);
 
   const dailyLimit =
     pickCount(details, ["limit", "daily_limit", "safety_messages_per_day", "daily_cap"]) ?? null;
@@ -215,10 +222,17 @@ function formatLegacyLeadsInsufficientMessage(errMessage, action = "generic") {
 }
 
 function formatFollowingsDailyQuotaMessage(details) {
-  const requestedNow = pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
-  const usedToday = pickCount(details, ["used_today", "consumed_today", "followings_used_today"]) ?? 0;
+  const requestedNow =
+    pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
+  const usedToday =
+    pickCount(details, ["used_today", "consumed_today", "followings_used_today"]) ?? 0;
   const dailyLimit =
-    pickCount(details, ["limit", "daily_limit", "plan_followings_per_day", "safety_messages_per_day"]) ?? null;
+    pickCount(details, [
+      "limit",
+      "daily_limit",
+      "plan_followings_per_day",
+      "safety_messages_per_day",
+    ]) ?? null;
   const remaining = pickCount(details, ["remaining", "remaining_today"]) ?? null;
   const usedLabel = dailyLimit != null ? `${usedToday}/${dailyLimit}` : String(usedToday);
   let message = `Límite diario de followings alcanzado. Cupo usado hoy: ${usedLabel}.`;
@@ -228,13 +242,16 @@ function formatFollowingsDailyQuotaMessage(details) {
 }
 
 function formatFollowingsMonthlyQuotaMessage(details) {
-  const requestedNow = pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
+  const requestedNow =
+    pickCount(details, ["requested", "requested_limit", "requested_to_analyze"]) ?? 0;
   const usedThisMonth =
-    pickCount(details, ["followings_jobs_this_month", "used_this_month", "consumed_this_month"]) ?? 0;
+    pickCount(details, ["followings_jobs_this_month", "used_this_month", "consumed_this_month"]) ??
+    0;
   const monthlyLimit =
     pickCount(details, ["plan_followings_per_month", "monthly_limit", "limit"]) ?? null;
   const remaining = pickCount(details, ["remaining_this_month", "remaining"]) ?? null;
-  const usedLabel = monthlyLimit != null ? `${usedThisMonth}/${monthlyLimit}` : String(usedThisMonth);
+  const usedLabel =
+    monthlyLimit != null ? `${usedThisMonth}/${monthlyLimit}` : String(usedThisMonth);
   let message = `Límite mensual de followings alcanzado. Cupo usado este mes: ${usedLabel}.`;
   if (requestedNow > 0) message += ` Solicitados ahora: ${requestedNow}.`;
   if (remaining != null) message += ` Disponibles este mes: ${remaining}.`;

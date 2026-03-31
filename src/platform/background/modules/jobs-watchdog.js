@@ -154,7 +154,8 @@
     }
 
     function getWatchdogState() {
-      const extra = typeof extendedStateProvider === "function" ? extendedStateProvider() || {} : {};
+      const extra =
+        typeof extendedStateProvider === "function" ? extendedStateProvider() || {} : {};
       return {
         lastProgressTs,
         progressStage,

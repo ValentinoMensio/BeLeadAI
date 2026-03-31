@@ -434,12 +434,7 @@ function showLimitDetail(type) {
     const monthLimitLabel = limitMonth != null ? String(limitMonth) : "∞";
     clearElement(detailEl);
     appendDiv(detailEl, "detail-title", `Cuota mensual (plan ${planName})`);
-    appendDetailLine(
-      detailEl,
-      "Enviados este ciclo: ",
-      String(usedMonth),
-      ` / ${monthLimitLabel}`
-    );
+    appendDetailLine(detailEl, "Enviados este ciclo: ", String(usedMonth), ` / ${monthLimitLabel}`);
     appendDiv(detailEl, "detail-line reset-in", `Próximo vencimiento: ${resetDate || "—"}`);
   }
   detailEl.classList.remove("border-ok", "border-warn", "border-blocked");

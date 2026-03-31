@@ -67,7 +67,9 @@ export function createSendSenderController(deps) {
           warmupStatus === "starting";
         senderWarmupStartedByThisCall = warmupStatus === "started";
         const warmupAccepted =
-          senderWarmupStarted || warmupStatus === "no_tasks" || warmupStatus === "no_tasks_cooldown";
+          senderWarmupStarted ||
+          warmupStatus === "no_tasks" ||
+          warmupStatus === "no_tasks_cooldown";
         if (!warmupAccepted) {
           if (warmup?.reason === "sender_offline") {
             setSendStatus(

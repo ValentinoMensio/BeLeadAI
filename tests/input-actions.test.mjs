@@ -45,7 +45,12 @@ test("input actions writeSearchQuery normalizes and writes search value", async 
   });
   const inputActions = mod.createContentInputActionsModule({
     selectorsModule: {
-      HUMAN_CONFIG: { typingBaseMs: 10, typingJitterMs: 0, thinkingPauseMin: 10, thinkingPauseMax: 10 },
+      HUMAN_CONFIG: {
+        typingBaseMs: 10,
+        typingJitterMs: 0,
+        thinkingPauseMin: 10,
+        thinkingPauseMax: 10,
+      },
       randomBetween: () => 0,
       sleep: async () => {},
       humanDelay: async () => {},
@@ -71,7 +76,12 @@ test("input actions typeHumanLike writes into textarea", async () => {
   });
   const inputActions = mod.createContentInputActionsModule({
     selectorsModule: {
-      HUMAN_CONFIG: { typingBaseMs: 10, typingJitterMs: 0, thinkingPauseMin: 10, thinkingPauseMax: 10 },
+      HUMAN_CONFIG: {
+        typingBaseMs: 10,
+        typingJitterMs: 0,
+        thinkingPauseMin: 10,
+        thinkingPauseMax: 10,
+      },
       randomBetween: () => 0,
       sleep: async () => {},
       humanDelay: async () => {},

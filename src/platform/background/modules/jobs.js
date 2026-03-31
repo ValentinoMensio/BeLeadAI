@@ -213,7 +213,10 @@
             )
           )
           .catch((stopErr) => {
-            console.error("[BG] stopSender failed after stack overflow:", stopErr?.message || stopErr);
+            console.error(
+              "[BG] stopSender failed after stack overflow:",
+              stopErr?.message || stopErr
+            );
           })
           .finally(() => {
             fatalStopInFlight = false;
@@ -286,7 +289,9 @@
       } else {
         watchdogModule.markProgressStage("cooldown_wait");
       }
-      console.log(`[BG] Esperando... próximo DM en ${Math.round((state.nextDMTime - now) / 1000)}s`);
+      console.log(
+        `[BG] Esperando... próximo DM en ${Math.round((state.nextDMTime - now) / 1000)}s`
+      );
       return true;
     }
 
@@ -308,7 +313,9 @@
         .trim()
         .toLowerCase();
       if (pullReason === "account_not_detected") {
-        console.warn("[BG] Pull sin cuenta detectada: intentando recuperación agresiva de pestaña...");
+        console.warn(
+          "[BG] Pull sin cuenta detectada: intentando recuperación agresiva de pestaña..."
+        );
         try {
           const recovered = await runtimeModule.ensureInstagramDirectReady(1);
           if (recovered?.ok) {
@@ -543,7 +550,11 @@
           return;
         }
         if (acquired.type === "retry") {
-          console.warn("[BG] Pull no disponible temporalmente, reintentando en", acquired.waitMs, "ms");
+          console.warn(
+            "[BG] Pull no disponible temporalmente, reintentando en",
+            acquired.waitMs,
+            "ms"
+          );
           if (state.isRunning) {
             scheduleProcessNextTask(acquired.waitMs, "pull_retry");
           }
@@ -653,7 +664,10 @@
         watchdogRecoveryAttempts: watchdogModule.getWatchdogRecoveryAttempts(),
         watchdogState: watchdogModule.getWatchdogState(),
         failureMetrics: buildFailureMetrics(),
-        noTasksRestartCooldownMs: Math.max(0, runStateModule.getNoTasksRestartCooldownUntil() - now),
+        noTasksRestartCooldownMs: Math.max(
+          0,
+          runStateModule.getNoTasksRestartCooldownUntil() - now
+        ),
         fromAccount: normalizeAccount(
           runStateModule.getCurrentActiveAccount() || runStateModule.getCurrentKnownAccount()
         ),

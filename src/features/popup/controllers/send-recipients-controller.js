@@ -11,7 +11,13 @@ export function createSendRecipientsController(deps) {
   const { loadSettings, loadRecipientSourceRecipientsPage } = services;
   const { setSendStatus, renderRecipients } = ui;
   const { qs } = dom;
-  const { normalizeJobId, setRecipientsExpanded, updateRecipientsSelectionUI, setSendInfoStatus, syncRecipientChipsFromState } = helpers;
+  const {
+    normalizeJobId,
+    setRecipientsExpanded,
+    updateRecipientsSelectionUI,
+    setSendInfoStatus,
+    syncRecipientChipsFromState,
+  } = helpers;
 
   function getRecipientsKindLabel(kind) {
     const kindLower = String(kind || "").toLowerCase();

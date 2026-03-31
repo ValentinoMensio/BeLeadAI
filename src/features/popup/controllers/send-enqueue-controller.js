@@ -2,19 +2,16 @@ import { API_PATHS } from "../../../config/endpoints.js";
 import { logApiErrorDiagnostic } from "../../../shared/errors/error-diagnostics.js";
 
 export function createSendEnqueueController(deps) {
-  const {
-    store,
-    services,
-    ui,
-    dom,
-    config,
-    runtime,
-    helpers,
-    enqueueState,
-  } = deps;
+  const { store, services, ui, dom, config, runtime, helpers, enqueueState } = deps;
   const { getState, getSelectedRecipientUsernames } = store;
   const { loadSettings, apiFetch } = services;
-  const { setSendStatus, setEnqueueSendEnabled, getLimitsData, refreshLimitsWithCache, isUnlimited } = ui;
+  const {
+    setSendStatus,
+    setEnqueueSendEnabled,
+    getLimitsData,
+    refreshLimitsWithCache,
+    isUnlimited,
+  } = ui;
   const { qs } = dom;
   const {
     getSelectedRecipients,
@@ -81,7 +78,11 @@ export function createSendEnqueueController(deps) {
       }
       const limitsData = getLimitsData();
       const remainingMonth = limitsData?.messages?.remaining_this_month;
-      if (remainingMonth != null && !isUnlimited(remainingMonth) && toSend.length > remainingMonth) {
+      if (
+        remainingMonth != null &&
+        !isUnlimited(remainingMonth) &&
+        toSend.length > remainingMonth
+      ) {
         setSendStatus(
           `Tu plan permite ${remainingMonth} mensaje${remainingMonth === 1 ? "" : "s"} este mes. No podés encolar ${toSend.length}.`,
           true
@@ -173,7 +174,9 @@ export function createSendEnqueueController(deps) {
           .trim()
           .toUpperCase();
         const blockingQuota =
-          result?.error?.details?.blocking_quota || result?.data?.error?.details?.blocking_quota || "";
+          result?.error?.details?.blocking_quota ||
+          result?.data?.error?.details?.blocking_quota ||
+          "";
         setBlockingQuota(blockingQuota || errorCode || "");
         const isActiveConflict =
           result.status === 409 &&

@@ -46,7 +46,8 @@
       const headings = document.querySelectorAll("h2");
       for (const h of headings) {
         const t = (h.textContent || "").trim().toLowerCase();
-        if (!(t.includes("more accounts") || t.includes("más cuentas") || t === "accounts")) continue;
+        if (!(t.includes("more accounts") || t.includes("más cuentas") || t === "accounts"))
+          continue;
 
         let scope =
           h.closest('div[style*="--x-minHeight"]') ||
@@ -311,7 +312,9 @@
           maskUsername(username)
         );
       }
-      const currentSearchValue = normalizeSearchValue(searchInput.value || searchInput.textContent || "");
+      const currentSearchValue = normalizeSearchValue(
+        searchInput.value || searchInput.textContent || ""
+      );
       console.log(
         "[BeLeadAI] Username ingresado en input:",
         maskUsername(username),
@@ -340,7 +343,9 @@
       console.log("[BeLeadAI] Timeout configurado:", timeoutMs, "ms");
 
       while (Date.now() - startTs < timeoutMs) {
-        const currentValue = normalizeSearchValue(searchInput.value || searchInput.textContent || "");
+        const currentValue = normalizeSearchValue(
+          searchInput.value || searchInput.textContent || ""
+        );
         if (currentValue !== uname && Date.now() - startTs > 1200) {
           console.warn(
             "[BeLeadAI] Query se desincronizó (actual=",
@@ -379,7 +384,10 @@
 
           if (elapsed > 4500) {
             const soft = rowSoftMatch(row, uname);
-            if (soft && (rowHasExtraIdentitySignal(row, uname) || rowHasTextExactUsername(row, uname))) {
+            if (
+              soft &&
+              (rowHasExtraIdentitySignal(row, uname) || rowHasTextExactUsername(row, uname))
+            ) {
               soft.confidence = "soft";
               console.log("[BeLeadAI] Match DEBIL encontrado (con señal extra) para @" + uname);
               clickPlan.push({ priority: 1, match: soft });
@@ -388,7 +396,10 @@
         }
 
         if (clickPlan.length === 0 && resultRows.length === 1 && elapsed > 8000) {
-          if (rowHasExtraIdentitySignal(resultRows[0], uname) || rowHasTextExactUsername(resultRows[0], uname)) {
+          if (
+            rowHasExtraIdentitySignal(resultRows[0], uname) ||
+            rowHasTextExactUsername(resultRows[0], uname)
+          ) {
             clickPlan.push({
               priority: 2,
               match: {
@@ -400,7 +411,8 @@
             });
           } else {
             console.warn(
-              "[BeLeadAI] Se descarta single-visible-row sin señal extra de identidad para @" + uname
+              "[BeLeadAI] Se descarta single-visible-row sin señal extra de identidad para @" +
+                uname
             );
           }
         }
@@ -446,7 +458,9 @@
               candidateConfidence,
             };
           }
-          console.warn("[BeLeadAI] Candidato clickeado pero no abrió thread, probando siguiente...");
+          console.warn(
+            "[BeLeadAI] Candidato clickeado pero no abrió thread, probando siguiente..."
+          );
         }
 
         if (!clickedAny) {
@@ -488,10 +502,15 @@
       const openedByKeyboardFallback = await attemptKeyboardOpenFirstResult(searchInput);
       if (openedByKeyboardFallback) {
         console.log("[BeLeadAI] Thread abierto con fallback de teclado tras timeout de dropdown.");
-        console.log("[BeLeadAI] ========== FIN directSearchAndOpenThread (EXITO por fallback) ==========");
+        console.log(
+          "[BeLeadAI] ========== FIN directSearchAndOpenThread (EXITO por fallback) =========="
+        );
         return { ok: true, candidateUsername: uname, candidateConfidence: "soft" };
       }
-      console.error("[BeLeadAI] ERROR FINAL: No se encontró resultado de búsqueda para", maskUsername(username));
+      console.error(
+        "[BeLeadAI] ERROR FINAL: No se encontró resultado de búsqueda para",
+        maskUsername(username)
+      );
       console.error("[BeLeadAI] ========== FIN directSearchAndOpenThread (FALLIDO) ==========");
       return { ok: false, candidateUsername: null, candidateConfidence: null };
     }

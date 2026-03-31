@@ -3,7 +3,17 @@
   "$id": "contracts/v1/send-enqueue.request.schema.json",
   "title": "POST /ext/v2/send/enqueue request",
   "type": "object",
-  "required": ["from_account", "usernames", "message_template_hash", "idempotency_key", "idempotency_version", "recipient_idempotency_keys", "source_job_id", "dry_run", "use_ai"],
+  "required": [
+    "from_account",
+    "usernames",
+    "message_template_hash",
+    "idempotency_key",
+    "idempotency_version",
+    "recipient_idempotency_keys",
+    "source_job_id",
+    "dry_run",
+    "use_ai"
+  ],
   "properties": {
     "from_account": { "type": "string", "minLength": 1 },
     "usernames": {

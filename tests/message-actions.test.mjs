@@ -12,7 +12,13 @@ test("message actions waitForSendConfirmation detects composer cleared", async (
   });
   const messageActions = mod.createContentMessageActionsModule({
     selectorsModule: {
-      HUMAN_CONFIG: { selectors: {}, profileViewMin: 10, profileViewMax: 10, afterSendMin: 10, afterSendMax: 10 },
+      HUMAN_CONFIG: {
+        selectors: {},
+        profileViewMin: 10,
+        profileViewMax: 10,
+        afterSendMin: 10,
+        afterSendMax: 10,
+      },
       sleep: async () => {},
       humanDelay: async () => {},
       waitForCondition: async () => true,
@@ -31,7 +37,11 @@ test("message actions waitForSendConfirmation detects composer cleared", async (
 test("message actions typeAndSendMessage types and clicks send button", async () => {
   let clicked = 0;
   const textarea = { tagName: "TEXTAREA" };
-  const sendBtn = { click() { clicked += 1; } };
+  const sendBtn = {
+    click() {
+      clicked += 1;
+    },
+  };
   const typed = [];
   const mod = await loadBackgroundModule(modulePath, { document: { querySelectorAll: () => [] } });
   const messageActions = mod.createContentMessageActionsModule({

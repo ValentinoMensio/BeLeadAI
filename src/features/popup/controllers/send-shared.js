@@ -1,4 +1,8 @@
-import { isTerminalJobStatus, normalizeEntityType, normalizeJobStatus } from "../../../shared/domain/job-contract.js";
+import {
+  isTerminalJobStatus,
+  normalizeEntityType,
+  normalizeJobStatus,
+} from "../../../shared/domain/job-contract.js";
 
 export async function waitMs(ms) {
   const delay = Math.max(0, Number(ms || 0));
@@ -90,7 +94,9 @@ export function normalizeCounter(value) {
 
 export function normalizeSendSummary(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const queued = normalizeCounter(raw.queued ?? raw.pending ?? raw.pending_count ?? raw.queued_count);
+  const queued = normalizeCounter(
+    raw.queued ?? raw.pending ?? raw.pending_count ?? raw.queued_count
+  );
   const sent = normalizeCounter(raw.running ?? raw.sent ?? raw.running_count ?? raw.sent_count);
   const ok = normalizeCounter(raw.completed ?? raw.ok ?? raw.completed_count ?? raw.ok_count);
   const error = normalizeCounter(raw.failed ?? raw.error ?? raw.failed_count ?? raw.error_count);

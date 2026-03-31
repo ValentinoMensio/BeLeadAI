@@ -3,7 +3,7 @@
     const { isLikelyIgUsername } = observersModule;
 
     function getCookie(name) {
-      const parts = (`; ${document.cookie || ""}`).split(`; ${name}=`);
+      const parts = `; ${document.cookie || ""}`.split(`; ${name}=`);
       if (parts.length !== 2) return null;
       const value = parts[1].split(";")[0].trim();
       return value || null;

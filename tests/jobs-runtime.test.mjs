@@ -8,9 +8,7 @@ const modulePath = resolve(root, "src/platform/background/modules/jobs-runtime.j
 
 function createChromeMock() {
   const listeners = [];
-  const tabs = [
-    { id: 1, active: true, url: "https://www.instagram.com/direct/inbox/" },
-  ];
+  const tabs = [{ id: 1, active: true, url: "https://www.instagram.com/direct/inbox/" }];
   return {
     listeners,
     chrome: {

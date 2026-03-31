@@ -7,13 +7,8 @@
     messageActionsModule,
     accountIdentityModule,
   }) {
-    const {
-      HUMAN_CONFIG,
-      humanDelay,
-      waitForCondition,
-      waitForElement,
-      waitForSendButton,
-    } = selectorsModule;
+    const { HUMAN_CONFIG, humanDelay, waitForCondition, waitForElement, waitForSendButton } =
+      selectorsModule;
     const {
       normalizeIgUsername,
       isLikelyIgUsername,
@@ -23,7 +18,8 @@
     } = observersModule;
     const { typeHumanLike } = inputActionsModule;
     const { directSearchAndOpenThread: openDirectThread } = directSearchModule;
-    const { waitForSendConfirmation, clickMessageButton, typeAndSendMessage } = messageActionsModule;
+    const { waitForSendConfirmation, clickMessageButton, typeAndSendMessage } =
+      messageActionsModule;
     const { getCurrentInstagramUsername } = accountIdentityModule;
 
     let lastDirectThreadCandidateUsername = null;

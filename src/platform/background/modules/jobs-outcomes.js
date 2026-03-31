@@ -148,7 +148,9 @@
     async function finalizeTaskRun(username, dryRun, result, failureClass) {
       if (
         result.success ||
-        String(result?.error || "").trim().toLowerCase() !== "thread_identity_not_verified"
+        String(result?.error || "")
+          .trim()
+          .toLowerCase() !== "thread_identity_not_verified"
       ) {
         runStateModule.resetThreadIdentityFails();
       }

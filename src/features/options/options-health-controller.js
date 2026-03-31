@@ -26,7 +26,8 @@ function classifyFetchError(e) {
   ) {
     return {
       kind: "tls",
-      message: "Error de certificado/HTTPS. Probá con https:// y revisá que el certificado sea válido.",
+      message:
+        "Error de certificado/HTTPS. Probá con https:// y revisá que el certificado sea válido.",
     };
   }
   if (
@@ -41,8 +42,15 @@ function classifyFetchError(e) {
 }
 
 function isLikelyHtmlResponse(text) {
-  const t = String(text || "").trim().toLowerCase();
-  return t.startsWith("<!doctype html") || t.startsWith("<html") || t.includes("<head") || t.includes("<body");
+  const t = String(text || "")
+    .trim()
+    .toLowerCase();
+  return (
+    t.startsWith("<!doctype html") ||
+    t.startsWith("<html") ||
+    t.includes("<head") ||
+    t.includes("<body")
+  );
 }
 
 function summarizeHtmlResponse(status) {
@@ -83,11 +91,19 @@ export function createOptionsHealthController(deps) {
   const { getAuthHeadersFromBackground, ensureApiHostPermission } = auth;
   const { setCfgStatus } = ui;
   const { fetchPingService } = services;
-  const { persistVersionBlockState, clearVersionBlockState, showVersionBlockScreen, hideVersionBlockScreen } = versioning;
+  const {
+    persistVersionBlockState,
+    clearVersionBlockState,
+    showVersionBlockScreen,
+    hideVersionBlockScreen,
+  } = versioning;
   const { refreshCfgStatus } = helpers;
 
   async function fetchPingWithHeaders(baseUrl, headers, options = {}) {
-    const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    const networkOnly =
+      String(options?.cacheMode || "default")
+        .trim()
+        .toLowerCase() === "network-only";
     const empty = {
       urlOk: false,
       tokenOk: false,
@@ -100,11 +116,15 @@ export function createOptionsHealthController(deps) {
     };
     if (!baseUrl || !headers.Authorization) return empty;
     try {
-      const ping = await fetchPingService({ api_base: baseUrl }, { cacheMode: networkOnly ? "network-only" : "default" });
+      const ping = await fetchPingService(
+        { api_base: baseUrl },
+        { cacheMode: networkOnly ? "network-only" : "default" }
+      );
       const accounts = Array.isArray(ping?.accounts) ? ping.accounts : [];
-      const defaultFromAccount = ping?.defaultFromAccount != null && String(ping.defaultFromAccount).trim()
-        ? String(ping.defaultFromAccount).trim().toLowerCase()
-        : null;
+      const defaultFromAccount =
+        ping?.defaultFromAccount != null && String(ping.defaultFromAccount).trim()
+          ? String(ping.defaultFromAccount).trim().toLowerCase()
+          : null;
       const accountUsername = ping?.accountUsername ? String(ping.accountUsername).trim() : null;
       return {
         urlOk: !!ping?.urlOk,
@@ -176,7 +196,10 @@ export function createOptionsHealthController(deps) {
   }
 
   async function fetchApiConfig(apiBase, options = {}) {
-    const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    const networkOnly =
+      String(options?.cacheMode || "default")
+        .trim()
+        .toLowerCase() === "network-only";
     if (!apiBase) return null;
     if (!isSecureApiBase(apiBase)) return null;
     if (!(await ensureApiHostPermission(apiBase, false))) return null;
@@ -184,7 +207,9 @@ export function createOptionsHealthController(deps) {
     const to = setTimeout(() => controller.abort(), config.apiConfigTimeoutMs);
     try {
       const authHeaders = await getAuthHeadersFromBackground();
-      const headers = authHeaders?.Authorization ? { Authorization: authHeaders.Authorization } : undefined;
+      const headers = authHeaders?.Authorization
+        ? { Authorization: authHeaders.Authorization }
+        : undefined;
       const url = buildApiUrl(apiBase, API_PATHS.config);
       const r = await fetch(url, {
         headers: buildClientHeaders(headers),
@@ -211,7 +236,8 @@ export function createOptionsHealthController(deps) {
     if (!base) return ($("#health_result").value = "Configura la API primero.");
     if (!isSecureApiBase(base)) return ($("#health_result").value = "La API debe usar HTTPS.");
     const hasPermission = await ensureApiHostPermission(base, true);
-    if (!hasPermission) return ($("#health_result").value = "No se concedió permiso para el dominio de la API.");
+    if (!hasPermission)
+      return ($("#health_result").value = "No se concedió permiso para el dominio de la API.");
 
     const url = buildApiUrl(base, API_PATHS.health);
     $("#health_result").value = "Probando…";
@@ -240,13 +266,21 @@ export function createOptionsHealthController(deps) {
             update_url: data?.error?.details?.updateUrl || data?.error?.details?.update_url,
           });
         }
-        const retrySec = typeof window.retryAfterFromResponse === "function" ? window.retryAfterFromResponse(r, data) : null;
+        const retrySec =
+          typeof window.retryAfterFromResponse === "function"
+            ? window.retryAfterFromResponse(r, data)
+            : null;
         const msg = toUserApiError(r.status, data, t, retrySec);
         $("#health_result").value = msg;
-        setCfgStatus("warn", r.status === 429 ? "Demasiadas solicitudes" : "API responde con error");
+        setCfgStatus(
+          "warn",
+          r.status === 429 ? "Demasiadas solicitudes" : "API responde con error"
+        );
       }
     } catch (e) {
-      logApiErrorDiagnostic("options.test_health.network_failure", e, { endpoint: API_PATHS.health });
+      logApiErrorDiagnostic("options.test_health.network_failure", e, {
+        endpoint: API_PATHS.health,
+      });
       $("#health_result").value = "Error de red o permisos. Revisá URL y permiso del dominio API.";
       setCfgStatus("err", "Sin conexión");
     }

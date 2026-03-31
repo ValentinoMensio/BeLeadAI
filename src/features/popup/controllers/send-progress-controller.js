@@ -2,14 +2,7 @@ import { logApiErrorDiagnostic } from "../../../shared/errors/error-diagnostics.
 import { isTerminalSendJobStatus, normalizeSendSummary } from "./send-shared.js";
 
 export function createSendProgressController(deps) {
-  const {
-    store,
-    services,
-    ui,
-    helpers,
-    config,
-    state,
-  } = deps;
+  const { store, services, ui, helpers, config, state } = deps;
   const { setState, getSelectedRecipientCount } = store;
   const { loadSettings, loadJobSummary } = services;
   const { setEnqueueSendEnabled, updateSendJobProgress } = ui;
@@ -82,7 +75,9 @@ export function createSendProgressController(deps) {
           let senderRunning = false;
           if (inFlight) {
             try {
-              const senderStatus = await chrome.runtime.sendMessage({ action: "get_sender_status" });
+              const senderStatus = await chrome.runtime.sendMessage({
+                action: "get_sender_status",
+              });
               senderRunning = !!senderStatus?.isRunning;
             } catch {
               senderRunning = false;

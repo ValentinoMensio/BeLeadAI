@@ -27,7 +27,7 @@ test("published contract schemas are valid JSON", async () => {
     "send-pull.request.schema.json",
     "send-pull.response.schema.json",
     "send-result.request.schema.json",
-    "send-heartbeat.request.schema.json"
+    "send-heartbeat.request.schema.json",
   ];
 
   await Promise.all(

@@ -3,7 +3,13 @@
   "$id": "contracts/v1/send-heartbeat.request.schema.json",
   "title": "POST /api/send/heartbeat request",
   "type": "object",
-  "required": ["sender_instance_id", "from_account", "autonomous", "sender_running", "ig_account_detected"],
+  "required": [
+    "sender_instance_id",
+    "from_account",
+    "autonomous",
+    "sender_running",
+    "ig_account_detected"
+  ],
   "properties": {
     "sender_instance_id": { "type": "string", "minLength": 1 },
     "from_account": { "type": "string", "minLength": 1 },

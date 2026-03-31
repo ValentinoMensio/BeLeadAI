@@ -131,7 +131,8 @@ export function initSendTab(deps) {
     runtime: {
       activeConflictErrorCodes: ACTIVE_CONFLICT_ERROR_CODES,
       noPendingErrorCodes: NO_PENDING_ERROR_CODES,
-      onSendRecipientsJobChange: (...args) => recipientsController.onSendRecipientsJobChange(...args),
+      onSendRecipientsJobChange: (...args) =>
+        recipientsController.onSendRecipientsJobChange(...args),
     },
     helpers: {
       getSelectedRecipients,
@@ -450,7 +451,9 @@ export function initSendTab(deps) {
   function updateRecipientsSelectionUI() {
     const st = getState();
     const count = getSelectedRecipientCount();
-    const total = Number(st.recipientMatchedCount || st.recipientTotalCount || st.visibleRecipientUsernames.length || 0);
+    const total = Number(
+      st.recipientMatchedCount || st.recipientTotalCount || st.visibleRecipientUsernames.length || 0
+    );
     const labelEl = document.getElementById("recipients_toggle_label");
     if (labelEl)
       labelEl.textContent =
@@ -618,7 +621,8 @@ export function initSendTab(deps) {
         });
 
         const stillHasPreviousSelection =
-          !!previousSelectedJobId && jobsWithPending.some((job) => job.id === previousSelectedJobId);
+          !!previousSelectedJobId &&
+          jobsWithPending.some((job) => job.id === previousSelectedJobId);
         if (stillHasPreviousSelection) {
           sel.value = previousSelectedJobId;
           setSendRecipientContext({
@@ -727,7 +731,8 @@ export function initSendTab(deps) {
       cancelJobWithRetry,
       refreshSendProgress,
       refreshRecipients,
-      onSendRecipientsJobChange: (...args) => recipientsController.onSendRecipientsJobChange(...args),
+      onSendRecipientsJobChange: (...args) =>
+        recipientsController.onSendRecipientsJobChange(...args),
       reconcilePendingCancelableJobId,
       updateSendSyncLabel,
     },

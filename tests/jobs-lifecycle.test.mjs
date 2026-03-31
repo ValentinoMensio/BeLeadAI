@@ -23,7 +23,10 @@ test("jobs-lifecycle blocks start during cooldown", async () => {
       resetRuntimeState() {},
     },
     watchdogModule: { resetRecoveryState() {}, updateProgress() {} },
-    normalizeAccount: (v) => String(v || "").trim().toLowerCase(),
+    normalizeAccount: (v) =>
+      String(v || "")
+        .trim()
+        .toLowerCase(),
     getPinnedSenderAccount: () => "",
     pinSenderAccountForRun: () => "",
     clearPendingProcessNextTimer() {},
@@ -79,7 +82,10 @@ test("jobs-lifecycle stopSender clears running state and returns stopped", async
       resetRuntimeState() {},
     },
     watchdogModule: { resetRecoveryState() {}, updateProgress() {} },
-    normalizeAccount: (v) => String(v || "").trim().toLowerCase(),
+    normalizeAccount: (v) =>
+      String(v || "")
+        .trim()
+        .toLowerCase(),
     getPinnedSenderAccount: () => "",
     pinSenderAccountForRun: () => "",
     clearPendingProcessNextTimer() {},

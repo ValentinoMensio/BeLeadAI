@@ -94,7 +94,10 @@ test("jobs-outcomes persists failure metrics and report outcome", async () => {
   assert.equal(outcome.failureClass, "transient");
   assert.equal(ctx.runStateModule.counts.transient, 1);
   assert.equal(ctx.reported.length, 1);
-  assert.equal(ctx.savedStates.some((entry) => entry.type === "processed"), true);
+  assert.equal(
+    ctx.savedStates.some((entry) => entry.type === "processed"),
+    true
+  );
 });
 
 test("jobs-outcomes handles thread identity failure with retry scheduling", async () => {

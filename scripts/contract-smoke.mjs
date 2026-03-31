@@ -103,7 +103,9 @@ function validateSchemaValue(schema, value, valuePath = "$") {
   }
 
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
-    fail(`${valuePath}: expected one of ${schema.enum.map((item) => JSON.stringify(item)).join(", ")}.`);
+    fail(
+      `${valuePath}: expected one of ${schema.enum.map((item) => JSON.stringify(item)).join(", ")}.`
+    );
   }
 
   if (schema.type) {
@@ -114,7 +116,11 @@ function validateSchemaValue(schema, value, valuePath = "$") {
     }
   }
 
-  if (typeof value === "string" && Number.isFinite(schema.minLength) && value.length < schema.minLength) {
+  if (
+    typeof value === "string" &&
+    Number.isFinite(schema.minLength) &&
+    value.length < schema.minLength
+  ) {
     fail(`${valuePath}: expected minLength ${schema.minLength}.`);
   }
 
@@ -123,7 +129,9 @@ function validateSchemaValue(schema, value, valuePath = "$") {
   }
 
   if (Array.isArray(value) && schema.items) {
-    value.forEach((item, index) => validateSchemaValue(schema.items, item, `${valuePath}[${index}]`));
+    value.forEach((item, index) =>
+      validateSchemaValue(schema.items, item, `${valuePath}[${index}]`)
+    );
   }
 
   if (isObject(value)) {

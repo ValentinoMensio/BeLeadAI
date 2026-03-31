@@ -7,7 +7,9 @@ function generateTraceId() {
       return globalThis.crypto.randomUUID().replace(/-/g, "");
     }
   } catch {}
-  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 18)}`.padEnd(32, "0").slice(0, 32);
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 18)}`
+    .padEnd(32, "0")
+    .slice(0, 32);
 }
 
 function getManifest() {
@@ -47,7 +49,9 @@ export function getClientMetadata() {
 
 export function buildClientHeaders(baseHeaders = {}) {
   const metadata = getClientMetadata();
-  const traceId = String(baseHeaders["X-Trace-ID"] || baseHeaders["x-trace-id"] || "").trim() || generateTraceId();
+  const traceId =
+    String(baseHeaders["X-Trace-ID"] || baseHeaders["x-trace-id"] || "").trim() ||
+    generateTraceId();
   return {
     ...baseHeaders,
     "X-Client-Version": metadata.version,

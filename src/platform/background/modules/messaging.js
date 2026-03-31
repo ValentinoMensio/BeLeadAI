@@ -87,7 +87,10 @@
               }
               sendResponse({
                 ok: !!ok,
-                from_account: String(status?.fromAccount || "").trim().toLowerCase() || null,
+                from_account:
+                  String(status?.fromAccount || "")
+                    .trim()
+                    .toLowerCase() || null,
               });
             })
             .catch((e) => {

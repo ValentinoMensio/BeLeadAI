@@ -48,7 +48,11 @@ export function subscribe(fn) {
 }
 
 function normalizeUsernames(usernames) {
-  return [...new Set((Array.isArray(usernames) ? usernames : []).map((u) => String(u || "").trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      (Array.isArray(usernames) ? usernames : []).map((u) => String(u || "").trim()).filter(Boolean)
+    ),
+  ];
 }
 
 export function getSelectedRecipientUsernames() {
@@ -116,7 +120,9 @@ export function setSendRecipientContext({
   matchedCount = 0,
 }) {
   const normalizedUsernames = normalizeUsernames(visibleUsernames);
-  const normalizedSelected = normalizeUsernames(selectedUsernames == null ? normalizedUsernames : selectedUsernames);
+  const normalizedSelected = normalizeUsernames(
+    selectedUsernames == null ? normalizedUsernames : selectedUsernames
+  );
   setState({
     selectedSendJobId: jobId,
     selectedSendKind: kind,

@@ -6,7 +6,13 @@ import { loadBackgroundModule } from "./helpers/load-background-module.mjs";
 const root = resolve(process.cwd());
 const modulePath = resolve(root, "src/platform/background/modules/jobs-reporting.js");
 
-function createResponse({ ok = true, status = 200, jsonData = {}, textData = "", retryAfter = null }) {
+function createResponse({
+  ok = true,
+  status = 200,
+  jsonData = {},
+  textData = "",
+  retryAfter = null,
+}) {
   return {
     ok,
     status,
@@ -34,7 +40,10 @@ function createDeps(overrides = {}) {
   const authModule = {
     loadSettings: async () => ({ api_base: "https://api.example.com", refresh_token: "rt" }),
     isSecureApiBase: () => true,
-    getAuthHeaders: async () => ({ Authorization: "Bearer token", "Content-Type": "application/json" }),
+    getAuthHeaders: async () => ({
+      Authorization: "Bearer token",
+      "Content-Type": "application/json",
+    }),
     refreshJwtSingleFlight: async () => true,
     ...overrides.authModule,
   };
@@ -63,9 +72,15 @@ function createDeps(overrides = {}) {
       authErrorBackoffMs: 60000,
       networkFetchTimeoutMs: 500,
       maskIdentity: (value) => `masked:${value}`,
-      normalizeAccount: (value) => String(value || "").trim().toLowerCase(),
+      normalizeAccount: (value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
       getPinnedSenderAccount: () => overrides.pinnedAccount || "",
-      pinSenderAccountForRun: (value) => String(value || "").trim().toLowerCase(),
+      pinSenderAccountForRun: (value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
       getFallbackHeartbeatAccount: () => overrides.fallbackAccount || "fallback_user",
       getLoggedInUsername: async () => overrides.loggedInUsername || "logged_user",
       updateProgress: (stage) => progress.push(stage),
@@ -138,7 +153,10 @@ test("jobs-reporting reportResult enqueues and clears current task after flush",
   assert.equal(ctx.enqueued.length, 1);
   assert.equal(ctx.progress.includes("result_reported"), true);
   assert.equal(ctx.progress.includes("flush_ok"), true);
-  assert.equal(ctx.saved.some((patch) => patch.dm_current_task === null), true);
+  assert.equal(
+    ctx.saved.some((patch) => patch.dm_current_task === null),
+    true
+  );
 });
 
 test("jobs-reporting sendSenderHeartbeat falls back to detected account and succeeds", async () => {

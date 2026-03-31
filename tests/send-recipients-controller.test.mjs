@@ -9,7 +9,11 @@ const controllerPath = resolve(
   "src/features/popup/controllers/send-recipients-controller.js"
 );
 
-async function loadSendRecipientsController({ documentMock, setTimeoutImpl, clearTimeoutImpl } = {}) {
+async function loadSendRecipientsController({
+  documentMock,
+  setTimeoutImpl,
+  clearTimeoutImpl,
+} = {}) {
   const source = await readFile(controllerPath, "utf8");
   const transformed = source.replace(
     "export function createSendRecipientsController",
@@ -22,9 +26,13 @@ async function loadSendRecipientsController({ documentMock, setTimeoutImpl, clea
     document: documentMock,
   };
   vm.createContext(context);
-  vm.runInContext(`${transformed}\nthis.createSendRecipientsController = createSendRecipientsController;`, context, {
-    filename: controllerPath,
-  });
+  vm.runInContext(
+    `${transformed}\nthis.createSendRecipientsController = createSendRecipientsController;`,
+    context,
+    {
+      filename: controllerPath,
+    }
+  );
   return context.createSendRecipientsController;
 }
 
@@ -83,7 +91,9 @@ function createStore() {
     },
     toggleSelectedRecipient(username) {
       if (state.selectedRecipientUsernames.includes(username)) {
-        state.selectedRecipientUsernames = state.selectedRecipientUsernames.filter((item) => item !== username);
+        state.selectedRecipientUsernames = state.selectedRecipientUsernames.filter(
+          (item) => item !== username
+        );
       } else {
         state.selectedRecipientUsernames = [...state.selectedRecipientUsernames, username];
       }
@@ -96,7 +106,11 @@ function createStore() {
 
 function createDom() {
   const recipientsInfo = { style: { display: "none" } };
-  const recipientsList = { style: { display: "none" }, replaceChildren() {}, classList: { toggle() {} } };
+  const recipientsList = {
+    style: { display: "none" },
+    replaceChildren() {},
+    classList: { toggle() {} },
+  };
   const recipientsToggle = { setAttribute() {}, classList: { toggle() {} } };
   const recipientsSummary = { textContent: "" };
   const recipientsActions = { style: { display: "none" } };
@@ -130,7 +144,9 @@ function createDom() {
 test("send recipients controller loads first page and auto-selects visible usernames", async () => {
   const store = createStore();
   const dom = createDom();
-  const createSendRecipientsController = await loadSendRecipientsController({ documentMock: dom.documentMock });
+  const createSendRecipientsController = await loadSendRecipientsController({
+    documentMock: dom.documentMock,
+  });
   const renderCalls = [];
   const controller = createSendRecipientsController({
     store,
@@ -176,7 +192,9 @@ test("send recipients controller loads first page and auto-selects visible usern
 test("send recipients controller precarga todas las paginas del source", async () => {
   const store = createStore();
   const dom = createDom();
-  const createSendRecipientsController = await loadSendRecipientsController({ documentMock: dom.documentMock });
+  const createSendRecipientsController = await loadSendRecipientsController({
+    documentMock: dom.documentMock,
+  });
   let calls = 0;
   const controller = createSendRecipientsController({
     store,
@@ -224,7 +242,10 @@ test("send recipients controller precarga todas las paginas del source", async (
   await controller.onSendRecipientsJobChange("flow:job1", "followings_flow");
 
   assert.deepEqual(store.state.visibleRecipientUsernames, ["alice", "bob", "carol", "dave"]);
-  assert.deepEqual(store.state.selectedRecipientUsernames.sort(), ["alice", "bob", "carol", "dave"].sort());
+  assert.deepEqual(
+    store.state.selectedRecipientUsernames.sort(),
+    ["alice", "bob", "carol", "dave"].sort()
+  );
   assert.equal(store.state.recipientHasMore, false);
   assert.equal(calls, 2);
 });

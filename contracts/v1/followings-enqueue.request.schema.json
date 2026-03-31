@@ -3,7 +3,14 @@
   "$id": "contracts/v1/followings-enqueue.request.schema.json",
   "title": "POST /ext/v2/followings/enqueue request",
   "type": "object",
-  "required": ["from_account", "target_username", "limit", "analysis_depth_mode", "idempotency_key", "idempotency_version"],
+  "required": [
+    "from_account",
+    "target_username",
+    "limit",
+    "analysis_depth_mode",
+    "idempotency_key",
+    "idempotency_version"
+  ],
   "properties": {
     "from_account": { "type": "string", "minLength": 1 },
     "target_username": { "type": "string", "minLength": 1 },

@@ -259,7 +259,10 @@ test("jobs schedules retry and popup update when no task is available", async ()
   assert.equal(harness.pullCalls.length, 1);
   assert.equal(harness.scheduledTimers.length, 1);
   assert.equal(harness.scheduledTimers[0].delay, 1500);
-  assert.equal(harness.popupMessages.some((msg) => msg?.type === "dm_status_update"), true);
+  assert.equal(
+    harness.popupMessages.some((msg) => msg?.type === "dm_status_update"),
+    true
+  );
   assert.equal(harness.stopReasons.length, 0);
 });
 
@@ -285,6 +288,9 @@ test("jobs claims task, sends DM and finalizes successful outcome", async () => 
   assert.equal(harness.sendDmCalls.length, 1);
   assert.equal(harness.buildOutcomeCalls.length, 1);
   assert.equal(harness.finalizeCalls.length, 1);
-  assert.equal(harness.savedStates.some((patch) => patch.dm_current_task?.task_id === "task-1"), true);
+  assert.equal(
+    harness.savedStates.some((patch) => patch.dm_current_task?.task_id === "task-1"),
+    true
+  );
   assert.equal(harness.state.isProcessing, false);
 });

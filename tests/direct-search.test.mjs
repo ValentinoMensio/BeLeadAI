@@ -133,7 +133,8 @@ function createHarness({
         },
         observersModule: {
           waitForThreadOpened: async () => {
-            const current = threadOpenSequence[Math.min(threadOpenCalls, threadOpenSequence.length - 1)];
+            const current =
+              threadOpenSequence[Math.min(threadOpenCalls, threadOpenSequence.length - 1)];
             threadOpenCalls += 1;
             return current;
           },

@@ -333,7 +333,11 @@ export async function loadLastJobs(baseUrl, limit = 5) {
     );
     const savedRawId = toCanonicalResultId(saved, "result");
     const savedId = extractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
-    return { ok: true, data: { extractJobs, savedJobId: savedId, nextCursor: null, refreshPending: false }, observability: flowResult.observability || jobsResult.observability || null };
+    return {
+      ok: true,
+      data: { extractJobs, savedJobId: savedId, nextCursor: null, refreshPending: false },
+      observability: flowResult.observability || jobsResult.observability || null,
+    };
   }
 
   if (!jobsResult.ok) {
@@ -393,7 +397,15 @@ export async function loadLastJobs(baseUrl, limit = 5) {
   );
   const savedRawId = toCanonicalResultId(saved, "result");
   const savedId = dedupedExtractJobs.some((j) => j.id === savedRawId) ? savedRawId : "";
-  return { ok: true, data: { extractJobs: dedupedExtractJobs, savedJobId: savedId, nextCursor: null, refreshPending: false } };
+  return {
+    ok: true,
+    data: {
+      extractJobs: dedupedExtractJobs,
+      savedJobId: savedId,
+      nextCursor: null,
+      refreshPending: false,
+    },
+  };
 }
 
 /**
@@ -499,10 +511,15 @@ export async function loadJobDebug(baseUrl, jobOrFlowId) {
     };
   }
   const parsed = parseScopedEntityId(resultId, "result");
-  const path = parsed.type === "flow" ? API_PATHS.flowDebug(resultId) : API_PATHS.jobDebug(resultId);
+  const path =
+    parsed.type === "flow" ? API_PATHS.flowDebug(resultId) : API_PATHS.jobDebug(resultId);
   const result = await apiFetch(baseUrl, path);
   if (!result.ok) {
-    const error = buildServiceError(result, "RESULT_DEBUG_FAILED", "No se pudo cargar el diagnóstico del resultado.");
+    const error = buildServiceError(
+      result,
+      "RESULT_DEBUG_FAILED",
+      "No se pudo cargar el diagnóstico del resultado."
+    );
     return {
       ok: false,
       errorMessage: error.message,
@@ -528,7 +545,9 @@ export async function loadJobDebug(baseUrl, jobOrFlowId) {
       ...debugData,
       id: resultId,
       status: normalizeJobStatus(debugData.status),
-      kind: String(debugData.kind || "").trim().toLowerCase(),
+      kind: String(debugData.kind || "")
+        .trim()
+        .toLowerCase(),
     },
   };
 }
@@ -732,10 +751,18 @@ export async function loadRecipientSourceRecipientsPage(
       error: { code: "SOURCE_ID_REQUIRED", message, status: 400 },
     };
   }
-  const params = new URLSearchParams({ limit: String(Math.max(1, Math.min(Number(limit || 100) || 100, 250))) });
-  const normalizedCursor = String(cursor || "").trim().toLowerCase();
-  const normalizedQuery = String(query || "").trim().toLowerCase();
-  const normalizedFrom = String(fromAccount || "").trim().toLowerCase();
+  const params = new URLSearchParams({
+    limit: String(Math.max(1, Math.min(Number(limit || 100) || 100, 250))),
+  });
+  const normalizedCursor = String(cursor || "")
+    .trim()
+    .toLowerCase();
+  const normalizedQuery = String(query || "")
+    .trim()
+    .toLowerCase();
+  const normalizedFrom = String(fromAccount || "")
+    .trim()
+    .toLowerCase();
   if (normalizedCursor) params.set("cursor", normalizedCursor);
   if (normalizedQuery) params.set("query", normalizedQuery);
   if (normalizedFrom) params.set("from_account", normalizedFrom);
@@ -756,7 +783,9 @@ export async function loadRecipientSourceRecipientsPage(
       data: {
         sourceId: String(data?.source_id || id),
         sourceKind: String(data?.source_kind || ""),
-        usernames: Array.isArray(data?.usernames) ? data.usernames.map((u) => String(u || "").trim()).filter(Boolean) : [],
+        usernames: Array.isArray(data?.usernames)
+          ? data.usernames.map((u) => String(u || "").trim()).filter(Boolean)
+          : [],
         total: Number(data?.total || 0) || 0,
         pendingCount: Number(data?.pending_count || 0) || 0,
         matchedCount: Number(data?.matched_count || 0) || 0,

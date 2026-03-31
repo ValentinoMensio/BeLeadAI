@@ -63,7 +63,8 @@
         setNativeInputValue(searchInput, desired);
         dispatchInputLikeEvents(searchInput, desired);
         await waitForCondition(
-          () => normalizeSearchValue(searchInput.value || searchInput.textContent || "") === desired,
+          () =>
+            normalizeSearchValue(searchInput.value || searchInput.textContent || "") === desired,
           { timeout: 220 + attempt * 120, pollMs: 60, settleMinMs: 40, settleMaxMs: 120 }
         );
         const current = normalizeSearchValue(searchInput.value || searchInput.textContent || "");
@@ -80,7 +81,9 @@
       await humanDelay(300, 600);
 
       const target =
-        editable.tagName === "P" ? editable.closest('[contenteditable="true"]') || editable : editable;
+        editable.tagName === "P"
+          ? editable.closest('[contenteditable="true"]') || editable
+          : editable;
       target.textContent = "";
       await sleep(50);
       target.textContent = text;

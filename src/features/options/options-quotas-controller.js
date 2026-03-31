@@ -56,7 +56,9 @@ function formatResetLabel(used, resetAtIso) {
 }
 
 function resolveSentToday(account) {
-  const sent = Number(account?.sent_today ?? account?.messages_sent_today ?? account?.delivered_today ?? 0);
+  const sent = Number(
+    account?.sent_today ?? account?.messages_sent_today ?? account?.delivered_today ?? 0
+  );
   return Number.isFinite(sent) && sent > 0 ? sent : 0;
 }
 
@@ -83,7 +85,10 @@ export function createOptionsQuotasController(deps) {
   let quotasRefreshInterval = null;
 
   async function fetchQuotas(options = {}) {
-    const networkOnly = String(options?.cacheMode || "default").trim().toLowerCase() === "network-only";
+    const networkOnly =
+      String(options?.cacheMode || "default")
+        .trim()
+        .toLowerCase() === "network-only";
     const loadingEl = $("#quotas_loading");
     const contentEl = $("#quotas_content");
     const base = normalizeBaseUrl($("#api_base")?.value);
@@ -98,7 +103,8 @@ export function createOptionsQuotasController(deps) {
       return;
     }
     if (!(await ensureApiHostPermission(base, false))) {
-      if (loadingEl) loadingEl.textContent = "Concedé permiso al dominio de la API desde Guardar configuración.";
+      if (loadingEl)
+        loadingEl.textContent = "Concedé permiso al dominio de la API desde Guardar configuración.";
       if (contentEl) contentEl.style.display = "none";
       return;
     }
@@ -197,7 +203,9 @@ export function createOptionsQuotasController(deps) {
           const limitStr = safeDailyLimit <= 0 ? "∞" : String(safeDailyLimit);
           const card = document.createElement("div");
           card.className = "quotas-account-card";
-          card.replaceChildren(renderPendingLinkAccountCard(tabAccount, limitStr, formatResetLabel(0, null)));
+          card.replaceChildren(
+            renderPendingLinkAccountCard(tabAccount, limitStr, formatResetLabel(0, null))
+          );
           listEl.appendChild(card);
         } else if (items.length === 0) {
           const card = document.createElement("div");
@@ -206,9 +214,11 @@ export function createOptionsQuotasController(deps) {
           listEl.appendChild(card);
         } else {
           items.forEach((acc, idx) => {
-            const name = typeof acc === "object" && acc && acc.username != null ? acc.username : String(acc);
+            const name =
+              typeof acc === "object" && acc && acc.username != null ? acc.username : String(acc);
             const usedRaw = resolveSentToday(acc);
-            const limRaw = typeof acc === "object" && acc && acc.daily_limit != null ? acc.daily_limit : safety;
+            const limRaw =
+              typeof acc === "object" && acc && acc.daily_limit != null ? acc.daily_limit : safety;
             const used = Number(usedRaw) || 0;
             const lim = Number(limRaw);
             const safeAccLimit = Number.isFinite(lim) ? lim : 0;

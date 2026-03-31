@@ -501,7 +501,10 @@ export function initFetchTab(deps) {
   async function getPersistedJobId() {
     return await new Promise((resolve) => {
       chrome.storage.local.get({ last_flow_id: null, last_job_id: null }, (data) => {
-        const persisted = toCanonicalResultId(data?.last_flow_id || data?.last_job_id || "", "result");
+        const persisted = toCanonicalResultId(
+          data?.last_flow_id || data?.last_job_id || "",
+          "result"
+        );
         resolve(persisted || "");
       });
     });
@@ -706,7 +709,14 @@ export function initFetchTab(deps) {
     }
 
     const raw = (qs("#usernames") && qs("#usernames").value) || "";
-    const usernames = [...new Set(raw.split(/[\n,]/).map((s) => s.trim().toLowerCase()).filter(Boolean))];
+    const usernames = [
+      ...new Set(
+        raw
+          .split(/[\n,]/)
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean)
+      ),
+    ];
     if (usernames.length === 0) return setFetchStatus("Ingresá al menos un username.", true);
 
     const remainingMsgs = getRemainingFollowingsRequestLimit();

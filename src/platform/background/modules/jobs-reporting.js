@@ -281,7 +281,15 @@
       }
     }
 
-    async function reportResult(jobId, taskId, leaseProof, ok, destUsername, error = null, dryRun = false) {
+    async function reportResult(
+      jobId,
+      taskId,
+      leaseProof,
+      ok,
+      destUsername,
+      error = null,
+      dryRun = false
+    ) {
       const report = {
         job_id: String(jobId || ""),
         task_id: String(taskId || ""),
@@ -358,7 +366,8 @@
       const hintedAccount = normalizeAccount(detectedAccountHint);
       const detectedAccount = hintedAccount || normalizeAccount(await getLoggedInUsername());
       const igAccountDetected = !!detectedAccount;
-      const fallbackAccount = normalizeAccount(fromAccountOverride) || getFallbackHeartbeatAccount();
+      const fallbackAccount =
+        normalizeAccount(fromAccountOverride) || getFallbackHeartbeatAccount();
       const candidateAccount = pinnedAccount || detectedAccount || fallbackAccount;
       const heartbeatAccount = pinSenderAccountForRun(candidateAccount);
 
