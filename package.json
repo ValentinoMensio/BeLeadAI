@@ -11,8 +11,8 @@
     "test": "node --test tests/*.test.mjs",
     "lint": "eslint \"src/**/*.js\" \"scripts/**/*.mjs\" \"*.js\"",
     "lint:fix": "npm run lint -- --fix",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format": "npx prettier . --write",
+    "format:check": "npx prettier . --check"
   },
   "devDependencies": {
     "eslint": "^9.20.0",
