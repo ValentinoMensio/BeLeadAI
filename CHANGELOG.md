@@ -4,7 +4,7 @@
 
 - Se refactorizo la extension en modulos mas pequeños para background, popup, options y content script, reduciendo acoplamiento y mejorando mantenibilidad.
 - Se agregaron contratos publicos versionados con ejemplos y validacion local para endpoints HTTP y eventos WebSocket.
-- Se amplio fuertemente la cobertura de tests con suites para runtime, orquestacion de jobs, content script y flujo paginado de destinatarios.
+- Se amplio fuertemente la cobertura de tests con suites para runtime, orquestacion de jobs y content script.
 - Se elimino el uso de `innerHTML` del codigo fuente principal y se saneo `popup-store` a estado serializable con acciones explicitas.
 - Los limites diarios visibles en popup y opciones ahora muestran mensajes efectivamente enviados (`sent_today`) en lugar del consumo total reservado de la ventana 24h.
 
