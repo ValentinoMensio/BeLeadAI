@@ -285,15 +285,16 @@ function renderLimitsSummary(data, options = {}) {
   const safetyDaily = data.limits?.safety_messages_per_day;
   const planMonth = data.limits?.plan_messages_per_month;
   const usedToday = resolveUsedToday(data.messages, safetyDaily);
+  const sentToday = resolveSentToday(data.messages, usedToday);
   const usedMonth = resolveUsedMonth(data.messages, planMonth);
   const limitToday = isUnlimited(safetyDaily) ? null : (safetyDaily ?? 0);
   const limitMonth = isUnlimited(planMonth) ? null : (planMonth ?? 0);
-  const classDay = limitClass(usedToday, limitToday);
+  const classDay = limitClass(sentToday, limitToday);
   const classMonth = limitClass(usedMonth, limitMonth);
 
   const blocking = data.blocking_quota || null;
 
-  const pctDay = limitToday && limitToday > 0 ? Math.min(100, (usedToday / limitToday) * 100) : 0;
+  const pctDay = limitToday && limitToday > 0 ? Math.min(100, (sentToday / limitToday) * 100) : 0;
   const pctMonth = limitMonth && limitMonth > 0 ? Math.min(100, (usedMonth / limitMonth) * 100) : 0;
   if (circleDayEl) {
     circleDayEl.style.setProperty("--pct", String(pctDay));
@@ -390,10 +391,11 @@ function showLimitDetail(type) {
   const safetyDaily = limitsData.limits?.safety_messages_per_day;
   const planMonth = limitsData.limits?.plan_messages_per_month;
   const usedToday = resolveUsedToday(limitsData.messages, safetyDaily);
+  const sentToday = resolveSentToday(limitsData.messages, usedToday);
   const usedMonth = resolveUsedMonth(limitsData.messages, planMonth);
   const limitToday = isUnlimited(safetyDaily) ? null : (safetyDaily ?? 0);
   const limitMonth = isUnlimited(planMonth) ? null : (planMonth ?? 0);
-  const classDay = limitClass(usedToday, limitToday);
+  const classDay = limitClass(sentToday, limitToday);
   const classMonth = limitClass(usedMonth, limitMonth);
   const planName = limitsData.plan_name || "Basic";
 
@@ -413,12 +415,11 @@ function showLimitDetail(type) {
       loggedInAccount?.reset_at || (accounts.length > 0 ? accounts[0]?.reset_at : null);
     const resetIn = formatResetIn(resetAt);
     const resetLabel =
-      usedToday === 0
+      sentToday === 0
         ? "Se restablece al enviar el primer mensaje (ventana 24h)."
         : resetIn
           ? `Se restablece en: ${resetIn}`
           : "—";
-    const sentToday = resolveSentToday(limitsData.messages, usedToday);
     clearElement(detailEl);
     appendDiv(detailEl, "detail-title", "Límite diario por cuenta (seguridad)");
     appendDetailLine(

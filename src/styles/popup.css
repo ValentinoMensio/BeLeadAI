@@ -807,7 +807,6 @@ body.popup-root .recipients-actions {
   display: flex;
   gap: 8px;
   margin-top: 8px;
-  flex-wrap: wrap;
 }
 body.popup-root .recipients-action-btn {
   padding: 4px 10px;
@@ -863,63 +862,6 @@ body.popup-root .recipients-list .recipient-chip.deselected {
 }
 body.popup-root .recipients-list .recipient-chip.deselected:hover {
   background: rgba(255, 255, 255, 0.04);
-}
-
-body.popup-root #send_recipients_search {
-  margin: 8px 0 0;
-}
-
-body.popup-root #recipients_load_more {
-  margin-top: 8px;
-  width: 100%;
-}
-
-body.popup-root .send-confirm-modal {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 40;
-}
-
-body.popup-root .send-confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(8, 10, 18, 0.72);
-  backdrop-filter: blur(6px);
-}
-
-body.popup-root .send-confirm-dialog {
-  position: relative;
-  width: min(320px, calc(100vw - 32px));
-  padding: 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-normal);
-  background: linear-gradient(180deg, rgba(33, 26, 51, 0.98), rgba(13, 21, 33, 0.98));
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
-}
-
-body.popup-root .send-confirm-title {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-body.popup-root .send-confirm-body {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-body.popup-root .send-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
 }
 
 /* Badges */

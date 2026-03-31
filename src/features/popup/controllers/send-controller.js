@@ -459,11 +459,7 @@ export function initSendTab(deps) {
       qs("#send_recipients_summary"),
       total,
       count,
-      getRecipientsKindLabel(st),
-      {
-        matchedCount: st.recipientMatchedCount || st.recipientTotalCount || 0,
-        visibleCount: Array.isArray(st.visibleRecipientUsernames) ? st.visibleRecipientUsernames.length : 0,
-      }
+      getRecipientsKindLabel(st)
     );
     if (count > 0) {
       setSendInfoStatus(
@@ -808,19 +804,6 @@ export function initSendTab(deps) {
       deselectAllBtn.addEventListener("click", onDeselectAll);
       cleanupFns.push(() => deselectAllBtn.removeEventListener("click", onDeselectAll));
     }
-    const recipientsSearch = qs("#send_recipients_search");
-    if (recipientsSearch) {
-      const onSearchInput = () => recipientsController.onRecipientsSearchInput();
-      recipientsSearch.addEventListener("input", onSearchInput);
-      cleanupFns.push(() => recipientsSearch.removeEventListener("input", onSearchInput));
-    }
-    const loadMoreBtn = qs("#recipients_load_more");
-    if (loadMoreBtn) {
-      const onLoadMore = () => recipientsController.loadMoreRecipients();
-      loadMoreBtn.addEventListener("click", onLoadMore);
-      cleanupFns.push(() => loadMoreBtn.removeEventListener("click", onLoadMore));
-    }
-
     const startSenderBtn = qs("#start_sender");
     if (startSenderBtn) {
       startSenderBtn.addEventListener("click", startSender);

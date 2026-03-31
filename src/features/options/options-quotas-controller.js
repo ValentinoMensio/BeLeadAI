@@ -55,6 +55,11 @@ function formatResetLabel(used, resetAtIso) {
   return r ? `Se restablece en: ${r}` : "-";
 }
 
+function resolveSentToday(account) {
+  const sent = Number(account?.sent_today ?? account?.messages_sent_today ?? account?.delivered_today ?? 0);
+  return Number.isFinite(sent) && sent > 0 ? sent : 0;
+}
+
 function setQuotaBar(fillEl, parentProgress, value, maxVal) {
   if (!fillEl) return;
   const max = maxVal <= 0 ? 1 : maxVal;
@@ -202,7 +207,7 @@ export function createOptionsQuotasController(deps) {
         } else {
           items.forEach((acc, idx) => {
             const name = typeof acc === "object" && acc && acc.username != null ? acc.username : String(acc);
-            const usedRaw = typeof acc === "object" && acc && acc.used_today != null ? acc.used_today : 0;
+            const usedRaw = resolveSentToday(acc);
             const limRaw = typeof acc === "object" && acc && acc.daily_limit != null ? acc.daily_limit : safety;
             const used = Number(usedRaw) || 0;
             const lim = Number(limRaw);

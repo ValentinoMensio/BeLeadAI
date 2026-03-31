@@ -33,45 +33,10 @@ export function createSendEnqueueController(deps) {
       .toLowerCase();
   }
 
-  function setConfirmModalOpen(open) {
-    const modal = qs("#send_confirm_modal");
-    if (!modal) return;
-    modal.classList.toggle("is-hidden", !open);
-    modal.setAttribute("aria-hidden", open ? "false" : "true");
-  }
-
   async function confirmRealSend({ fromAccount, selectedCount, useChatgpt }) {
-    const modal = qs("#send_confirm_modal");
-    const bodyEl = qs("#send_confirm_body");
-    const acceptBtn = qs("#send_confirm_accept");
-    const cancelBtn = qs("#send_confirm_cancel");
-    if (!modal || !bodyEl || !acceptBtn || !cancelBtn) return false;
-
-    bodyEl.textContent = `Vas a enviar ${selectedCount} mensaje${selectedCount === 1 ? "" : "s"} real${selectedCount === 1 ? "" : "es"} desde @${fromAccount}${useChatgpt ? " usando IA" : ""}. Esta acción consume cuota y no es simulada.`;
-    return await new Promise((resolve) => {
-      const close = (accepted) => {
-        setConfirmModalOpen(false);
-        acceptBtn.removeEventListener("click", onAccept);
-        cancelBtn.removeEventListener("click", onCancel);
-        modal.removeEventListener("click", onBackdrop);
-        document.removeEventListener("keydown", onKeyDown);
-        resolve(accepted);
-      };
-      const onAccept = () => close(true);
-      const onCancel = () => close(false);
-      const onBackdrop = (event) => {
-        if (event.target?.dataset?.action === "close-send-confirm") close(false);
-      };
-      const onKeyDown = (event) => {
-        if (event.key === "Escape") close(false);
-      };
-      acceptBtn.addEventListener("click", onAccept);
-      cancelBtn.addEventListener("click", onCancel);
-      modal.addEventListener("click", onBackdrop);
-      document.addEventListener("keydown", onKeyDown);
-      setConfirmModalOpen(true);
-      acceptBtn.focus();
-    });
+    return window.confirm(
+      `Vas a enviar ${selectedCount} mensaje${selectedCount === 1 ? "" : "s"} real${selectedCount === 1 ? "" : "es"} desde @${fromAccount}${useChatgpt ? " usando IA" : ""}. Esta acción consume cuota y no es simulada. ¿Continuar?`
+    );
   }
 
   async function enqueueSendMessages(options = {}) {

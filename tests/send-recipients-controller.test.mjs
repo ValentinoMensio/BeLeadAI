@@ -99,20 +99,12 @@ function createDom() {
   const recipientsList = { style: { display: "none" }, replaceChildren() {}, classList: { toggle() {} } };
   const recipientsToggle = { setAttribute() {}, classList: { toggle() {} } };
   const recipientsSummary = { textContent: "" };
-  const recipientsSearch = { value: "" };
-  const recipientsLoadMore = {
-    classList: { toggle() {} },
-    disabled: false,
-    textContent: "",
-  };
   const recipientsActions = { style: { display: "none" } };
   const elements = {
     "#send_recipients_info": recipientsInfo,
     "#send_recipients_list": recipientsList,
     "#recipients_toggle": recipientsToggle,
     "#send_recipients_summary": recipientsSummary,
-    "#send_recipients_search": recipientsSearch,
-    "#recipients_load_more": recipientsLoadMore,
   };
   const documentMock = {
     getElementById(id) {
@@ -131,8 +123,6 @@ function createDom() {
     recipientsList,
     recipientsToggle,
     recipientsSummary,
-    recipientsSearch,
-    recipientsLoadMore,
     recipientsActions,
   };
 }
@@ -183,7 +173,7 @@ test("send recipients controller loads first page and auto-selects visible usern
   assert.equal(renderCalls.length, 1);
 });
 
-test("send recipients controller appends next page preserving previous selection", async () => {
+test("send recipients controller precarga todas las paginas del source", async () => {
   const store = createStore();
   const dom = createDom();
   const createSendRecipientsController = await loadSendRecipientsController({ documentMock: dom.documentMock });
@@ -232,94 +222,9 @@ test("send recipients controller appends next page preserving previous selection
   });
 
   await controller.onSendRecipientsJobChange("flow:job1", "followings_flow");
-  store.toggleSelectedRecipient("bob");
-  await controller.loadMoreRecipients();
 
   assert.deepEqual(store.state.visibleRecipientUsernames, ["alice", "bob", "carol", "dave"]);
-  assert.deepEqual(store.state.selectedRecipientUsernames.sort(), ["alice"].sort());
+  assert.deepEqual(store.state.selectedRecipientUsernames.sort(), ["alice", "bob", "carol", "dave"].sort());
   assert.equal(store.state.recipientHasMore, false);
-});
-
-test("send recipients controller applies search query and keeps explicit selection", async () => {
-  const store = createStore();
-  const dom = createDom();
-  const requests = [];
-  let searchResolved;
-  const searchDone = new Promise((resolve) => {
-    searchResolved = resolve;
-  });
-  const originalSetTimeout = global.setTimeout;
-  global.setTimeout = (fn) => {
-    fn();
-    return 1;
-  };
-  const createSendRecipientsController = await loadSendRecipientsController({
-    documentMock: dom.documentMock,
-    setTimeoutImpl: (fn) => {
-      fn();
-      return 1;
-    },
-    clearTimeoutImpl: () => {},
-  });
-  const controller = createSendRecipientsController({
-    store,
-    services: {
-      loadSettings: async () => ({ api_base: "https://api.example.com" }),
-      loadRecipientSourceRecipientsPage: async (_base, _jobId, params) => {
-        requests.push(params);
-        if (params.query) {
-          const response = {
-            ok: true,
-            data: {
-              usernames: ["alice.special"],
-              nextCursor: null,
-              hasMore: false,
-              total: 1,
-              matchedCount: 1,
-              query: params.query,
-            },
-          };
-          Promise.resolve().then(() => searchResolved());
-          return response;
-        }
-        return {
-          ok: true,
-          data: {
-            usernames: ["alice", "bob"],
-            nextCursor: null,
-            hasMore: false,
-            total: 2,
-            matchedCount: 2,
-            query: "",
-          },
-        };
-      },
-    },
-    ui: { setSendStatus() {}, renderRecipients() {} },
-    dom,
-    helpers: {
-      normalizeJobId: (id) => id,
-      setRecipientsExpanded() {},
-      updateRecipientsSelectionUI() {},
-      setSendInfoStatus() {},
-      syncRecipientChipsFromState() {},
-    },
-  });
-
-  try {
-    await controller.onSendRecipientsJobChange("flow:job1", "followings_flow");
-    store.clearSelectedRecipients();
-    store.toggleSelectedRecipient("bob");
-    dom.recipientsSearch.value = "alice";
-    controller.onRecipientsSearchInput();
-    await searchDone;
-    await Promise.resolve();
-    await Promise.resolve();
-
-    assert.equal(requests.at(-1).query, "alice");
-    assert.deepEqual(store.state.visibleRecipientUsernames, ["alice.special"]);
-    assert.deepEqual(store.state.selectedRecipientUsernames, ["bob"]);
-  } finally {
-    global.setTimeout = originalSetTimeout;
-  }
+  assert.equal(calls, 2);
 });

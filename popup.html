@@ -108,9 +108,6 @@
               <span id="check-tab-label">Cuenta en pestaña: —</span>
             </div>
             </div>
-            <button id="btn-open-options" type="button" class="btn secondary">
-              Abrir Opciones
-            </button>
             <p id="setup-network-error" class="setup-network-error is-hidden"></p>
           </div>
 
@@ -393,13 +390,6 @@
 
                 <div id="send_recipients_info" class="recipients-info is-hidden">
                   <span class="hint" id="send_recipients_summary"></span>
-                  <input
-                    type="search"
-                    id="send_recipients_search"
-                    class="input"
-                    placeholder="Buscar destinatarios..."
-                    autocomplete="off"
-                  />
                   <button
                     type="button"
                     class="recipients-toggle"
@@ -411,16 +401,13 @@
                   </button>
                   <div id="recipients_actions" class="recipients-actions is-hidden">
                     <button type="button" class="recipients-action-btn" data-action="select-all">
-                      Todos visibles
+                      Todos
                     </button>
                     <button type="button" class="recipients-action-btn" data-action="deselect-all">
-                      Limpiar selección
+                      Ninguno
                     </button>
                   </div>
                   <div id="send_recipients_list" class="recipients-list is-hidden"></div>
-                  <button type="button" id="recipients_load_more" class="btn secondary is-hidden">
-                    Cargar más
-                  </button>
                 </div>
               </div>
 
@@ -499,27 +486,6 @@
                   Listo para configurar.
                 </div>
                 <div class="status-meta" id="send_last_sync">Sin sincronizar</div>
-
-                <div id="send_confirm_modal" class="send-confirm-modal is-hidden" aria-hidden="true">
-                  <div class="send-confirm-backdrop" data-action="close-send-confirm"></div>
-                  <div
-                    class="send-confirm-dialog"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="send_confirm_title"
-                  >
-                    <p id="send_confirm_title" class="send-confirm-title">Confirmar envío real</p>
-                    <p id="send_confirm_body" class="send-confirm-body"></p>
-                    <div class="send-confirm-actions">
-                      <button type="button" class="btn secondary" id="send_confirm_cancel">
-                        Cancelar
-                      </button>
-                      <button type="button" class="btn danger" id="send_confirm_accept">
-                        Enviar ahora
-                      </button>
-                    </div>
-                  </div>
-                </div>
 
                 <div class="divider"></div>
               </div>

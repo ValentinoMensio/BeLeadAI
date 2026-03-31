@@ -121,16 +121,13 @@ export function initSetup(deps) {
   }
 
   function bindSetupEvents() {
-    const btnOptions = qs("#btn-open-options");
     const cfgStatus = qs("#cfgStatus");
     const footerNote = qs("#footer-note");
     const onOpenOptions = () => openOptions();
-    if (btnOptions) btnOptions.addEventListener("click", onOpenOptions);
     if (cfgStatus) cfgStatus.addEventListener("click", onOpenOptions);
     if (footerNote) footerNote.addEventListener("click", onOpenOptions);
 
     function cleanup() {
-      if (btnOptions) btnOptions.removeEventListener("click", onOpenOptions);
       if (cfgStatus) cfgStatus.removeEventListener("click", onOpenOptions);
       if (footerNote) footerNote.removeEventListener("click", onOpenOptions);
     }
