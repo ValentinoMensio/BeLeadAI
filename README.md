@@ -4,7 +4,18 @@
 [![Distribucion](https://img.shields.io/badge/distribucion-GitHub%20Releases-2ea043.svg)](../../releases)
 [![Licencia](https://img.shields.io/badge/licencia-MIT-7f5af0.svg)](./LICENSE)
 
-Extension de Chrome para operar flujos desde una UI simple, conectada a una API privada.
+## Que puedes hacer con BeLeadAI
+
+BeLeadAI te ayuda a convertir Instagram en un canal de prospeccion y contacto comercial, desde una extension simple conectada a una API privada.
+
+Con la herramienta puedes:
+
+- Extraer followings de una cuenta objetivo para generar leads.
+- Analizar perfiles y detectar prospectos con mayor potencial.
+- Filtrar y seleccionar destinatarios desde resultados previos.
+- Enviar mensajes directos desde tu cuenta de Instagram.
+- Usar mensajes manuales o asistidos por IA para personalizar el contacto.
+- Monitorear jobs, progreso, resultados y limites de uso en tiempo real.
 
 ## Uso responsable
 
